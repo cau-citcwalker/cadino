@@ -38,6 +38,7 @@ private:
     void activate_wall_tool();
     void activate_box_tool();
     void activate_cylinder_tool();
+    void delete_selected();
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();
 
@@ -51,6 +52,7 @@ private:
 
     QAction* undo_action_{nullptr};
     QAction* redo_action_{nullptr};
+    QAction* delete_action_{nullptr};
     QAction* select_action_{nullptr};
     QAction* wall_action_{nullptr};
     QAction* box_action_{nullptr};

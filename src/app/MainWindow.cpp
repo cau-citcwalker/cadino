@@ -22,6 +22,10 @@
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
 
+#include "command/BoxCommands.hpp"
+#include "command/CylinderCommands.hpp"
+#include "command/WallCommands.hpp"
+
 namespace cadino::app {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -99,6 +103,11 @@ void MainWindow::build_menu() {
         update_undo_redo_actions();
     });
     update_undo_redo_actions();
+
+    edit_menu->addSeparator();
+    delete_action_ = edit_menu->addAction("&Delete");
+    delete_action_->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
+    connect(delete_action_, &QAction::triggered, this, &MainWindow::delete_selected);
 
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (2D)");
@@ -220,6 +229,27 @@ void MainWindow::set_view_mode(ViewMode mode) {
 void MainWindow::update_undo_redo_actions() {
     undo_action_->setEnabled(stack_.can_undo());
     redo_action_->setEnabled(stack_.can_redo());
+}
+
+void MainWindow::delete_selected() {
+    const auto& sel = plan_view_->selection();
+    if (!sel.valid()) return;
+
+    switch (sel.kind) {
+        case cadino::ui::SelectKind::Wall:
+            stack_.execute(std::make_unique<cadino::core::RemoveWallCommand>(sel.id));
+            break;
+        case cadino::ui::SelectKind::Box:
+            stack_.execute(std::make_unique<cadino::core::RemoveBoxCommand>(sel.id));
+            break;
+        case cadino::ui::SelectKind::Cylinder:
+            stack_.execute(std::make_unique<cadino::core::RemoveCylinderCommand>(sel.id));
+            break;
+        case cadino::ui::SelectKind::None:
+            return;
+    }
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
 }
 
 }  // namespace cadino::app
