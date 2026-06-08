@@ -6,6 +6,8 @@
 #include <QTransform>
 #include <QWidget>
 
+#include "Selection.hpp"
+
 namespace cadino::core {
 class Document;
 class CommandStack;
@@ -36,8 +38,13 @@ public:
 
     void notify_document_modified();
 
+    [[nodiscard]] const Selection& selection() const noexcept { return selection_; }
+    void set_selection(Selection sel);
+    void clear_selection();
+
 signals:
     void document_modified();
+    void selection_changed(const Selection& sel);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -65,6 +72,8 @@ private:
 
     bool panning_{false};
     QPointF last_pan_screen_{};
+
+    Selection selection_{};
 };
 
 }  // namespace cadino::ui

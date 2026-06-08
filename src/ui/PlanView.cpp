@@ -36,6 +36,17 @@ void PlanView::notify_document_modified() {
     update();
 }
 
+void PlanView::set_selection(Selection sel) {
+    if (selection_ == sel) return;
+    selection_ = sel;
+    emit selection_changed(selection_);
+    update();
+}
+
+void PlanView::clear_selection() {
+    set_selection(Selection{});
+}
+
 void PlanView::set_tool(std::unique_ptr<Tool> tool) {
     if (tool_) {
         tool_->on_cancel(*this);

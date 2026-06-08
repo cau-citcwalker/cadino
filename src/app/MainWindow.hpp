@@ -11,6 +11,7 @@ class QWidget;
 
 namespace cadino::ui {
 class PlanView;
+class PropertiesPanel;
 }
 
 namespace cadino::app {
@@ -45,6 +46,7 @@ private:
     QSplitter* splitter_{nullptr};
     cadino::ui::PlanView* plan_view_{nullptr};
     QWidget* viewport_3d_{nullptr};
+    cadino::ui::PropertiesPanel* properties_{nullptr};
 
     QAction* undo_action_{nullptr};
     QAction* redo_action_{nullptr};

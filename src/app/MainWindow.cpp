@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QDockWidget>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenuBar>
@@ -15,6 +16,7 @@
 
 #include "BoxTool.hpp"
 #include "PlanView.hpp"
+#include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
@@ -28,6 +30,17 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     build_central_widget();
     build_menu();
     build_toolbar();
+
+    properties_ = new cadino::ui::PropertiesPanel(document_, stack_, *plan_view_, this);
+    auto* dock = new QDockWidget("Properties", this);
+    dock->setWidget(properties_);
+    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    connect(plan_view_, &cadino::ui::PlanView::selection_changed, properties_,
+            &cadino::ui::PropertiesPanel::set_selection);
+    connect(plan_view_, &cadino::ui::PlanView::document_modified, properties_,
+            &cadino::ui::PropertiesPanel::refresh);
 
     activate_select_tool();
     set_view_mode(ViewMode::Split);
