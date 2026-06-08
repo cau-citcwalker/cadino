@@ -227,9 +227,8 @@ void Viewport3D::paintGL() {
     if (!program_ || !program_->isLinked()) return;
 
     program_->bind();
-    vao_.bind();
-
     rebuild_mesh();
+    vao_.bind();
 
     const QMatrix4x4 vp = projection_matrix() * view_matrix();
     program_->setUniformValue("u_view_proj", vp);
