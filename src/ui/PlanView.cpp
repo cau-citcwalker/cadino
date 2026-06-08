@@ -90,6 +90,53 @@ void PlanView::paintEvent(QPaintEvent*) {
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
+    draw_snap_marker(p);
+}
+
+QPointF PlanView::apply_snap(QPointF model_pos) {
+    const double tol = 12.0 / zoom_;
+    last_snap_ = snap_.snap(model_pos, document_, tol);
+    return last_snap_.found() ? last_snap_.position : model_pos;
+}
+
+void PlanView::draw_snap_marker(QPainter& p) {
+    if (!last_snap_.found()) return;
+
+    const QPointF s = model_to_screen(last_snap_.position);
+    QColor color;
+    switch (last_snap_.kind) {
+        case SnapKind::Endpoint: color = QColor(220, 80, 80); break;
+        case SnapKind::Midpoint: color = QColor(80, 180, 100); break;
+        case SnapKind::Corner:   color = QColor(220, 160, 60); break;
+        case SnapKind::Grid:     color = QColor(120, 120, 200); break;
+        default: return;
+    }
+
+    QPen pen(color, 2);
+    pen.setCosmetic(true);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+
+    const qreal r = 6.0;
+    switch (last_snap_.kind) {
+        case SnapKind::Endpoint:
+            p.drawRect(QRectF(s.x() - r, s.y() - r, 2 * r, 2 * r));
+            break;
+        case SnapKind::Midpoint:
+            p.drawPolygon(QPolygonF{
+                {s.x(), s.y() - r},
+                {s.x() + r, s.y() + r},
+                {s.x() - r, s.y() + r}});
+            break;
+        case SnapKind::Corner:
+            p.drawLine(s.x() - r, s.y() - r, s.x() + r, s.y() + r);
+            p.drawLine(s.x() - r, s.y() + r, s.x() + r, s.y() - r);
+            break;
+        case SnapKind::Grid:
+            p.drawEllipse(s, r - 1, r - 1);
+            break;
+        default: break;
+    }
 }
 
 void PlanView::draw_grid(QPainter& p) {
@@ -205,7 +252,8 @@ void PlanView::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (tool_) {
-        const auto mp = screen_to_model(event->position());
+        const auto raw = screen_to_model(event->position());
+        const auto mp = apply_snap(raw);
         tool_->on_press(*this, mp, event->button());
     }
 }
@@ -220,8 +268,12 @@ void PlanView::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
     if (tool_) {
-        const auto mp = screen_to_model(event->position());
+        const auto raw = screen_to_model(event->position());
+        const auto mp = apply_snap(raw);
         tool_->on_move(*this, mp);
+        update();
+    } else {
+        last_snap_ = {};
     }
 }
 
@@ -232,7 +284,8 @@ void PlanView::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
     if (tool_) {
-        const auto mp = screen_to_model(event->position());
+        const auto raw = screen_to_model(event->position());
+        const auto mp = apply_snap(raw);
         tool_->on_release(*this, mp, event->button());
     }
 }

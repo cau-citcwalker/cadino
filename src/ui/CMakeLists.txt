@@ -5,6 +5,7 @@ add_library(cadino_ui STATIC
     BoxTool.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
+    Snap.cpp
 )
 
 target_include_directories(cadino_ui

@@ -7,6 +7,7 @@
 #include <QWidget>
 
 #include "Selection.hpp"
+#include "Snap.hpp"
 
 namespace cadino::core {
 class Document;
@@ -42,6 +43,9 @@ public:
     void set_selection(Selection sel);
     void clear_selection();
 
+    [[nodiscard]] SnapEngine& snap_engine() noexcept { return snap_; }
+    [[nodiscard]] const SnapResult& last_snap() const noexcept { return last_snap_; }
+
 signals:
     void document_modified();
     void selection_changed(const Selection& sel);
@@ -60,6 +64,8 @@ private:
     void draw_grid(QPainter& p);
     void draw_walls(QPainter& p);
     void draw_boxes(QPainter& p);
+    void draw_snap_marker(QPainter& p);
+    QPointF apply_snap(QPointF model_pos);
 
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;
@@ -74,6 +80,9 @@ private:
     QPointF last_pan_screen_{};
 
     Selection selection_{};
+
+    SnapEngine snap_;
+    SnapResult last_snap_{};
 };
 
 }  // namespace cadino::ui
