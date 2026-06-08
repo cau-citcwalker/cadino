@@ -1,0 +1,39 @@
+# Build artifacts
+build/
+out/
+cmake-build-*/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+CMakeUserPresets.json
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake.in
+compile_commands.json
+
+# vcpkg
+vcpkg_installed/
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.exp
+*.obj
+*.app
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Third-party fetched sources
+third_party/opennurbs/

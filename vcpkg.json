@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "cadino",
+  "version-string": "0.0.1",
+  "description": "Unified CAD + NURBS 3D modeling tool for interior designers",
+  "homepage": "https://github.com/cadino/cadino",
+  "dependencies": [
+    {
+      "name": "opencascade",
+      "default-features": false,
+      "features": ["freetype"]
+    },
+    "eigen3",
+    "fmt",
+    "spdlog",
+    "catch2"
+  ],
+  "builtin-baseline": "12159785447291b4069c82a3fe9c2770a393ac7f"
+}
