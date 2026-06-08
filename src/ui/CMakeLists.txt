@@ -2,6 +2,7 @@ add_library(cadino_ui STATIC
     PlanView.cpp
     SelectTool.cpp
     WallTool.cpp
+    BoxTool.cpp
     Viewport3D.cpp
 )
 

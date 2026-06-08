@@ -47,6 +47,7 @@ private:
     QOpenGLVertexArrayObject vao_;
     QOpenGLBuffer vbo_{QOpenGLBuffer::VertexBuffer};
     int vertex_count_{0};
+    int walls_vertex_end_{6};
     bool mesh_dirty_{true};
     std::size_t last_wall_count_{0};
 

@@ -3,6 +3,7 @@ add_library(cadino_core STATIC
     document/Document.cpp
     command/CommandStack.cpp
     command/WallCommands.cpp
+    command/BoxCommands.cpp
 )
 
 target_include_directories(cadino_core

@@ -13,6 +13,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "BoxTool.hpp"
 #include "PlanView.hpp"
 #include "SelectTool.hpp"
 #include "Viewport3D.hpp"
@@ -130,6 +131,12 @@ void MainWindow::build_toolbar() {
     group->addAction(wall_action_);
     connect(wall_action_, &QAction::triggered, this, &MainWindow::activate_wall_tool);
 
+    box_action_ = tools->addAction("Box");
+    box_action_->setCheckable(true);
+    box_action_->setShortcut(QKeySequence("B"));
+    group->addAction(box_action_);
+    connect(box_action_, &QAction::triggered, this, &MainWindow::activate_box_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -151,6 +158,12 @@ void MainWindow::activate_wall_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::WallTool>());
     if (wall_action_) wall_action_->setChecked(true);
     statusBar()->showMessage("Wall tool — click two points to draw a wall (Esc to cancel)");
+}
+
+void MainWindow::activate_box_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::BoxTool>());
+    if (box_action_) box_action_->setChecked(true);
+    statusBar()->showMessage("Box tool — click two opposite corners (default height 750mm). Esc to cancel.");
 }
 
 void MainWindow::set_view_mode(ViewMode mode) {

@@ -26,6 +26,7 @@ EntityId Document::add_wall(Wall wall)     { return insert_with_id(walls_,   std
 EntityId Document::add_door(Door door)     { return insert_with_id(doors_,   std::move(door)); }
 EntityId Document::add_window(Window win)  { return insert_with_id(windows_, std::move(win));  }
 EntityId Document::add_slab(Slab slab)     { return insert_with_id(slabs_,   std::move(slab)); }
+EntityId Document::add_box(Box box)        { return insert_with_id(boxes_,   std::move(box));  }
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }
@@ -35,10 +36,13 @@ const Window* Document::find_window(EntityId id) const { return find_in(windows_
 Window*       Document::find_window(EntityId id)       { return find_in(windows_, id); }
 const Slab*   Document::find_slab(EntityId id)   const { return find_in(slabs_,   id); }
 Slab*         Document::find_slab(EntityId id)         { return find_in(slabs_,   id); }
+const Box*    Document::find_box(EntityId id)    const { return find_in(boxes_,   id); }
+Box*          Document::find_box(EntityId id)          { return find_in(boxes_,   id); }
 
 bool Document::remove_wall(EntityId id)   { return walls_.erase(id)   > 0; }
 bool Document::remove_door(EntityId id)   { return doors_.erase(id)   > 0; }
 bool Document::remove_window(EntityId id) { return windows_.erase(id) > 0; }
 bool Document::remove_slab(EntityId id)   { return slabs_.erase(id)   > 0; }
+bool Document::remove_box(EntityId id)    { return boxes_.erase(id)   > 0; }
 
 }  // namespace cadino::core

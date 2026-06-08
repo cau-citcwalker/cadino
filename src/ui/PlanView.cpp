@@ -74,6 +74,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     p.fillRect(rect(), QColor(248, 248, 248));
     p.setRenderHint(QPainter::Antialiasing);
     draw_grid(p);
+    draw_boxes(p);
     draw_walls(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
@@ -163,6 +164,24 @@ void PlanView::draw_walls(QPainter& p) {
         poly << model_to_screen(p1) << model_to_screen(p2)
              << model_to_screen(p3) << model_to_screen(p4);
         p.drawPolygon(poly);
+    }
+}
+
+void PlanView::draw_boxes(QPainter& p) {
+    QPen box_pen(QColor(120, 80, 40));
+    box_pen.setCosmetic(true);
+    box_pen.setWidth(2);
+    p.setPen(box_pen);
+    p.setBrush(QColor(210, 165, 110, 110));
+
+    for (const auto& [id, b] : document_.boxes()) {
+        const QPointF a_m(b.position.x() - b.size_xy.x() * 0.5,
+                          b.position.y() - b.size_xy.y() * 0.5);
+        const QPointF c_m(b.position.x() + b.size_xy.x() * 0.5,
+                          b.position.y() + b.size_xy.y() * 0.5);
+        const QPointF a_s = model_to_screen(a_m);
+        const QPointF c_s = model_to_screen(c_m);
+        p.drawRect(QRectF(a_s, c_s).normalized());
     }
 }
 

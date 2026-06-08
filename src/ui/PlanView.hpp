@@ -52,6 +52,7 @@ private:
     void update_transform();
     void draw_grid(QPainter& p);
     void draw_walls(QPainter& p);
+    void draw_boxes(QPainter& p);
 
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;

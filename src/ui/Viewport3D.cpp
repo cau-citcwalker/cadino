@@ -61,6 +61,27 @@ void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c
     v(a); v(c); v(d);
 }
 
+void push_axis_box(std::vector<Vertex>& verts, QVector3D min, QVector3D max) {
+    const QVector3D b0(min.x(), min.y(), min.z());
+    const QVector3D b1(max.x(), min.y(), min.z());
+    const QVector3D b2(max.x(), max.y(), min.z());
+    const QVector3D b3(min.x(), max.y(), min.z());
+    const QVector3D t0(min.x(), min.y(), max.z());
+    const QVector3D t1(max.x(), min.y(), max.z());
+    const QVector3D t2(max.x(), max.y(), max.z());
+    const QVector3D t3(min.x(), max.y(), max.z());
+    const QVector3D xp(1.0f, 0.0f, 0.0f);
+    const QVector3D yp(0.0f, 1.0f, 0.0f);
+    const QVector3D zp(0.0f, 0.0f, 1.0f);
+
+    push_quad(verts, t0, t1, t2, t3, zp);
+    push_quad(verts, b3, b2, b1, b0, -zp);
+    push_quad(verts, b1, b2, t2, t1, xp);
+    push_quad(verts, b3, b0, t0, t3, -xp);
+    push_quad(verts, b2, b3, t3, t2, yp);
+    push_quad(verts, b0, b1, t1, t0, -yp);
+}
+
 void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
     const QVector3D start(static_cast<float>(w.start.x()),
                           static_cast<float>(w.start.y()), 0.0f);
@@ -153,6 +174,17 @@ void Viewport3D::rebuild_mesh() {
     for (const auto& [id, w] : document_.walls()) {
         push_wall_box(verts, w);
     }
+    const std::size_t walls_end = verts.size();
+    for (const auto& [id, b] : document_.boxes()) {
+        const QVector3D min(static_cast<float>(b.position.x() - b.size_xy.x() * 0.5),
+                            static_cast<float>(b.position.y() - b.size_xy.y() * 0.5),
+                            static_cast<float>(b.base_z));
+        const QVector3D max(static_cast<float>(b.position.x() + b.size_xy.x() * 0.5),
+                            static_cast<float>(b.position.y() + b.size_xy.y() * 0.5),
+                            static_cast<float>(b.base_z + b.height));
+        push_axis_box(verts, min, max);
+    }
+    walls_vertex_end_ = static_cast<int>(walls_end);
 
     vao_.bind();
     vbo_.bind();
@@ -206,9 +238,13 @@ void Viewport3D::paintGL() {
     program_->setUniformValue("u_base_color", QVector3D(0.18f, 0.20f, 0.24f));
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    if (vertex_count_ > 6) {
+    if (walls_vertex_end_ > 6) {
         program_->setUniformValue("u_base_color", QVector3D(0.78f, 0.78f, 0.80f));
-        glDrawArrays(GL_TRIANGLES, 6, vertex_count_ - 6);
+        glDrawArrays(GL_TRIANGLES, 6, walls_vertex_end_ - 6);
+    }
+    if (vertex_count_ > walls_vertex_end_) {
+        program_->setUniformValue("u_base_color", QVector3D(0.78f, 0.62f, 0.40f));
+        glDrawArrays(GL_TRIANGLES, walls_vertex_end_, vertex_count_ - walls_vertex_end_);
     }
 
     vao_.release();
