@@ -8,6 +8,7 @@
 #include "PlanView.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
+#include "command/CylinderCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
 
@@ -64,6 +65,12 @@ void PropertiesPanel::refresh() {
             return;
         }
         build_for_box();
+    } else if (current_.kind == SelectKind::Cylinder) {
+        if (!document_.find_cylinder(current_.id)) {
+            show_empty("Cylinder no longer exists");
+            return;
+        }
+        build_for_cylinder();
     }
 }
 
@@ -173,6 +180,62 @@ void PropertiesPanel::build_for_box() {
                 &PropertiesPanel::commit_box_edit);
     }
     suppress_commit_ = false;
+}
+
+void PropertiesPanel::build_for_cylinder() {
+    const auto* c = document_.find_cylinder(current_.id);
+    if (!c) {
+        show_empty("Cylinder not found");
+        return;
+    }
+
+    suppress_commit_ = true;
+    clear_form();
+    empty_label_->setVisible(false);
+    title_->setText("Cylinder");
+
+    auto* pos_x = make_mm_field(c->position.x());
+    auto* pos_y = make_mm_field(c->position.y());
+    auto* radius = make_mm_field(c->radius);
+    radius->setMinimum(1.0);
+    auto* height = make_mm_field(c->height);
+    height->setMinimum(1.0);
+    auto* base_z = make_mm_field(c->base_z);
+
+    form_->addRow("Position X", pos_x);
+    form_->addRow("Position Y", pos_y);
+    form_->addRow("Radius", radius);
+    form_->addRow("Height", height);
+    form_->addRow("Base Z", base_z);
+
+    fields_ = {pos_x, pos_y, radius, height, base_z};
+
+    for (auto* field : fields_) {
+        connect(field, &QDoubleSpinBox::editingFinished, this,
+                &PropertiesPanel::commit_cylinder_edit);
+    }
+    suppress_commit_ = false;
+}
+
+void PropertiesPanel::commit_cylinder_edit() {
+    if (suppress_commit_ || !current_.valid() || fields_.size() != 5) return;
+    const auto* c = document_.find_cylinder(current_.id);
+    if (!c) return;
+
+    cadino::core::Cylinder after = *c;
+    after.position.x() = fields_[0]->value();
+    after.position.y() = fields_[1]->value();
+    after.radius = fields_[2]->value();
+    after.height = fields_[3]->value();
+    after.base_z = fields_[4]->value();
+
+    if (after.position == c->position && after.radius == c->radius &&
+        after.height == c->height && after.base_z == c->base_z) {
+        return;
+    }
+
+    stack_.execute(std::make_unique<cadino::core::ModifyCylinderCommand>(current_.id, after));
+    view_.notify_document_modified();
 }
 
 void PropertiesPanel::commit_wall_edit() {

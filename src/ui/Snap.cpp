@@ -63,6 +63,12 @@ SnapResult SnapEngine::snap(QPointF model_pos,
         }
     }
 
+    if (endpoint_enabled_) {
+        for (const auto& [id, c] : doc.cylinders()) {
+            consider({c.position.x(), c.position.y()}, SnapKind::Endpoint);
+        }
+    }
+
     if (best.kind != SnapKind::None) {
         return best;
     }

@@ -37,6 +37,7 @@ private:
     void activate_select_tool();
     void activate_wall_tool();
     void activate_box_tool();
+    void activate_cylinder_tool();
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();
 
@@ -53,6 +54,7 @@ private:
     QAction* select_action_{nullptr};
     QAction* wall_action_{nullptr};
     QAction* box_action_{nullptr};
+    QAction* cylinder_action_{nullptr};
     QAction* mode_plan_action_{nullptr};
     QAction* mode_viewport_action_{nullptr};
     QAction* mode_split_action_{nullptr};

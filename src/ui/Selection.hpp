@@ -8,6 +8,7 @@ enum class SelectKind {
     None,
     Wall,
     Box,
+    Cylinder,
 };
 
 struct Selection {

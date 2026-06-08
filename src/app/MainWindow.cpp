@@ -15,6 +15,7 @@
 #include <spdlog/spdlog.h>
 
 #include "BoxTool.hpp"
+#include "CylinderTool.hpp"
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
@@ -90,7 +91,7 @@ void MainWindow::build_menu() {
         update_undo_redo_actions();
     });
     redo_action_ = edit_menu->addAction("&Redo");
-    redo_action_->setShortcuts({QKeySequence::Redo, QKeySequence("Ctrl+Y")});
+    redo_action_->setShortcuts({QKeySequence("Ctrl+Shift+Z"), QKeySequence("Ctrl+Y")});
     connect(redo_action_, &QAction::triggered, this, [this] {
         stack_.redo();
         plan_view_->update();
@@ -150,6 +151,12 @@ void MainWindow::build_toolbar() {
     group->addAction(box_action_);
     connect(box_action_, &QAction::triggered, this, &MainWindow::activate_box_tool);
 
+    cylinder_action_ = tools->addAction("Cylinder");
+    cylinder_action_->setCheckable(true);
+    cylinder_action_->setShortcut(QKeySequence("C"));
+    group->addAction(cylinder_action_);
+    connect(cylinder_action_, &QAction::triggered, this, &MainWindow::activate_cylinder_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -177,6 +184,12 @@ void MainWindow::activate_box_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::BoxTool>());
     if (box_action_) box_action_->setChecked(true);
     statusBar()->showMessage("Box tool — click two opposite corners (default height 750mm). Esc to cancel.");
+}
+
+void MainWindow::activate_cylinder_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::CylinderTool>());
+    if (cylinder_action_) cylinder_action_->setChecked(true);
+    statusBar()->showMessage("Cylinder tool — click center then radius (default height 750mm). Esc to cancel.");
 }
 
 void MainWindow::set_view_mode(ViewMode mode) {

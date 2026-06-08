@@ -3,6 +3,7 @@ add_library(cadino_ui STATIC
     SelectTool.cpp
     WallTool.cpp
     BoxTool.cpp
+    CylinderTool.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
     Snap.cpp

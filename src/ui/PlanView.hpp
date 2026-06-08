@@ -64,6 +64,7 @@ private:
     void draw_grid(QPainter& p);
     void draw_walls(QPainter& p);
     void draw_boxes(QPainter& p);
+    void draw_cylinders(QPainter& p);
     void draw_snap_marker(QPainter& p);
     QPointF apply_snap(QPointF model_pos);
 

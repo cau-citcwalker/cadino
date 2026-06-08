@@ -62,6 +62,48 @@ void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c
     v(a); v(c); v(d);
 }
 
+void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
+                   float zmin, float zmax, int segments = 32) {
+    const float pi = std::numbers::pi_v<float>;
+    const QVector3D zp(0.0f, 0.0f, 1.0f);
+
+    for (int i = 0; i < segments; ++i) {
+        const float a0 = 2.0f * pi * i / segments;
+        const float a1 = 2.0f * pi * (i + 1) / segments;
+        const float c0 = std::cos(a0), s0 = std::sin(a0);
+        const float c1 = std::cos(a1), s1 = std::sin(a1);
+
+        const QVector3D b0(center.x() + radius * c0, center.y() + radius * s0, zmin);
+        const QVector3D b1(center.x() + radius * c1, center.y() + radius * s1, zmin);
+        const QVector3D t0(center.x() + radius * c0, center.y() + radius * s0, zmax);
+        const QVector3D t1(center.x() + radius * c1, center.y() + radius * s1, zmax);
+        const QVector3D n((c0 + c1) * 0.5f, (s0 + s1) * 0.5f, 0.0f);
+        push_quad(verts, b0, b1, t1, t0, n);
+    }
+
+    const QVector3D top_c(center.x(), center.y(), zmax);
+    const QVector3D bot_c(center.x(), center.y(), zmin);
+    for (int i = 0; i < segments; ++i) {
+        const float a0 = 2.0f * pi * i / segments;
+        const float a1 = 2.0f * pi * (i + 1) / segments;
+        const QVector3D pt0(center.x() + radius * std::cos(a0),
+                            center.y() + radius * std::sin(a0), zmax);
+        const QVector3D pt1(center.x() + radius * std::cos(a1),
+                            center.y() + radius * std::sin(a1), zmax);
+        verts.push_back({top_c.x(), top_c.y(), top_c.z(), 0.0f, 0.0f, 1.0f});
+        verts.push_back({pt0.x(), pt0.y(), pt0.z(), 0.0f, 0.0f, 1.0f});
+        verts.push_back({pt1.x(), pt1.y(), pt1.z(), 0.0f, 0.0f, 1.0f});
+
+        const QVector3D pb0(center.x() + radius * std::cos(a0),
+                            center.y() + radius * std::sin(a0), zmin);
+        const QVector3D pb1(center.x() + radius * std::cos(a1),
+                            center.y() + radius * std::sin(a1), zmin);
+        verts.push_back({bot_c.x(), bot_c.y(), bot_c.z(), 0.0f, 0.0f, -1.0f});
+        verts.push_back({pb1.x(), pb1.y(), pb1.z(), 0.0f, 0.0f, -1.0f});
+        verts.push_back({pb0.x(), pb0.y(), pb0.z(), 0.0f, 0.0f, -1.0f});
+    }
+}
+
 void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, float hy,
                        float zmin, float zmax, float yaw) {
     const float c = std::cos(yaw);
@@ -188,7 +230,16 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(b.base_z + b.height),
                           static_cast<float>(b.rotation_z));
     }
+    const std::size_t boxes_end = verts.size();
+    for (const auto& [id, c] : document_.cylinders()) {
+        const QVector3D center(static_cast<float>(c.position.x()),
+                               static_cast<float>(c.position.y()), 0.0f);
+        push_cylinder(verts, center, static_cast<float>(c.radius),
+                      static_cast<float>(c.base_z),
+                      static_cast<float>(c.base_z + c.height));
+    }
     walls_vertex_end_ = static_cast<int>(walls_end);
+    boxes_vertex_end_ = static_cast<int>(boxes_end);
 
     vao_.bind();
     vbo_.bind();
@@ -245,9 +296,13 @@ void Viewport3D::paintGL() {
         program_->setUniformValue("u_base_color", QVector3D(0.78f, 0.78f, 0.80f));
         glDrawArrays(GL_TRIANGLES, 6, walls_vertex_end_ - 6);
     }
-    if (vertex_count_ > walls_vertex_end_) {
+    if (boxes_vertex_end_ > walls_vertex_end_) {
         program_->setUniformValue("u_base_color", QVector3D(0.78f, 0.62f, 0.40f));
-        glDrawArrays(GL_TRIANGLES, walls_vertex_end_, vertex_count_ - walls_vertex_end_);
+        glDrawArrays(GL_TRIANGLES, walls_vertex_end_, boxes_vertex_end_ - walls_vertex_end_);
+    }
+    if (vertex_count_ > boxes_vertex_end_) {
+        program_->setUniformValue("u_base_color", QVector3D(0.55f, 0.70f, 0.82f));
+        glDrawArrays(GL_TRIANGLES, boxes_vertex_end_, vertex_count_ - boxes_vertex_end_);
     }
 
     vao_.release();

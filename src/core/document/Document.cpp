@@ -27,6 +27,7 @@ EntityId Document::add_door(Door door)     { return insert_with_id(doors_,   std
 EntityId Document::add_window(Window win)  { return insert_with_id(windows_, std::move(win));  }
 EntityId Document::add_slab(Slab slab)     { return insert_with_id(slabs_,   std::move(slab)); }
 EntityId Document::add_box(Box box)        { return insert_with_id(boxes_,   std::move(box));  }
+EntityId Document::add_cylinder(Cylinder c){ return insert_with_id(cylinders_, std::move(c));  }
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }
@@ -36,13 +37,16 @@ const Window* Document::find_window(EntityId id) const { return find_in(windows_
 Window*       Document::find_window(EntityId id)       { return find_in(windows_, id); }
 const Slab*   Document::find_slab(EntityId id)   const { return find_in(slabs_,   id); }
 Slab*         Document::find_slab(EntityId id)         { return find_in(slabs_,   id); }
-const Box*    Document::find_box(EntityId id)    const { return find_in(boxes_,   id); }
-Box*          Document::find_box(EntityId id)          { return find_in(boxes_,   id); }
+const Box*      Document::find_box(EntityId id)      const { return find_in(boxes_,     id); }
+Box*            Document::find_box(EntityId id)            { return find_in(boxes_,     id); }
+const Cylinder* Document::find_cylinder(EntityId id) const { return find_in(cylinders_, id); }
+Cylinder*       Document::find_cylinder(EntityId id)       { return find_in(cylinders_, id); }
 
 bool Document::remove_wall(EntityId id)   { return walls_.erase(id)   > 0; }
 bool Document::remove_door(EntityId id)   { return doors_.erase(id)   > 0; }
 bool Document::remove_window(EntityId id) { return windows_.erase(id) > 0; }
 bool Document::remove_slab(EntityId id)   { return slabs_.erase(id)   > 0; }
-bool Document::remove_box(EntityId id)    { return boxes_.erase(id)   > 0; }
+bool Document::remove_box(EntityId id)      { return boxes_.erase(id)     > 0; }
+bool Document::remove_cylinder(EntityId id) { return cylinders_.erase(id) > 0; }
 
 }  // namespace cadino::core

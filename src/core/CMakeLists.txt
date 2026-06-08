@@ -4,6 +4,7 @@ add_library(cadino_core STATIC
     command/CommandStack.cpp
     command/WallCommands.cpp
     command/BoxCommands.cpp
+    command/CylinderCommands.cpp
 )
 
 target_include_directories(cadino_core

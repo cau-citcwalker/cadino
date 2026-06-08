@@ -8,6 +8,7 @@
 #include "PlanView.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
+#include "command/CylinderCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
 
@@ -68,8 +69,24 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
         }
     }
 
+    cadino::core::EntityId best_cyl{};
+    for (const auto& [id, c] : doc.cylinders()) {
+        const double d = std::hypot(model_pos.x() - c.position.x(),
+                                    model_pos.y() - c.position.y());
+        if (d <= c.radius) {
+            best_cyl = id;
+            break;
+        }
+    }
+
     Selection new_sel{};
-    if (best_box.valid()) {
+    if (best_cyl.valid()) {
+        new_sel.id = best_cyl;
+        new_sel.kind = SelectKind::Cylinder;
+        original_cylinder_ = *doc.find_cylinder(best_cyl);
+        drag_start_ = model_pos;
+        dragging_ = true;
+    } else if (best_box.valid()) {
         new_sel.id = best_box;
         new_sel.kind = SelectKind::Box;
         original_box_ = *doc.find_box(best_box);
@@ -102,6 +119,10 @@ void SelectTool::on_move(PlanView& view, QPointF model_pos) {
         auto* b = view.document().find_box(sel.id);
         if (!b) return;
         b->position = original_box_.position + Eigen::Vector2d{delta.x(), delta.y()};
+    } else if (sel.kind == SelectKind::Cylinder) {
+        auto* c = view.document().find_cylinder(sel.id);
+        if (!c) return;
+        c->position = original_cylinder_.position + Eigen::Vector2d{delta.x(), delta.y()};
     }
     view.update();
 }
@@ -128,6 +149,13 @@ void SelectTool::on_release(PlanView& view, QPointF model_pos, Qt::MouseButton b
         *b = original_box_;
         view.command_stack().execute(
             std::make_unique<cadino::core::ModifyBoxCommand>(sel.id, std::move(after)));
+    } else if (sel.kind == SelectKind::Cylinder) {
+        auto* c = view.document().find_cylinder(sel.id);
+        if (!c) return;
+        cadino::core::Cylinder after = *c;
+        *c = original_cylinder_;
+        view.command_stack().execute(
+            std::make_unique<cadino::core::ModifyCylinderCommand>(sel.id, std::move(after)));
     }
     view.notify_document_modified();
 }
@@ -163,6 +191,12 @@ void SelectTool::paint_overlay(QPainter& p, const PlanView& view) const {
              << view.model_to_screen(rot( hx,  hy))
              << view.model_to_screen(rot(-hx,  hy));
         p.drawPolygon(poly);
+    } else if (sel.kind == SelectKind::Cylinder) {
+        const auto* c = view.document().find_cylinder(sel.id);
+        if (!c) return;
+        const QPointF center_s = view.model_to_screen({c->position.x(), c->position.y()});
+        const double r_s = c->radius * view.zoom();
+        p.drawEllipse(center_s, r_s, r_s);
     }
 }
 

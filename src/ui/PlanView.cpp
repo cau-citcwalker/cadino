@@ -86,11 +86,27 @@ void PlanView::paintEvent(QPaintEvent*) {
     p.setRenderHint(QPainter::Antialiasing);
     draw_grid(p);
     draw_boxes(p);
+    draw_cylinders(p);
     draw_walls(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
     draw_snap_marker(p);
+}
+
+void PlanView::draw_cylinders(QPainter& p) {
+    QPen pen(QColor(40, 90, 120));
+    pen.setCosmetic(true);
+    pen.setWidth(2);
+    p.setPen(pen);
+    p.setBrush(QColor(140, 195, 215, 110));
+
+    for (const auto& [id, c] : document_.cylinders()) {
+        const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
+        const double r_s = c.radius * zoom_;
+        p.drawEllipse(center_s, r_s, r_s);
+        p.drawPoint(center_s);
+    }
 }
 
 QPointF PlanView::apply_snap(QPointF model_pos) {

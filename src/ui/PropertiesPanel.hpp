@@ -33,6 +33,7 @@ public slots:
 private:
     void build_for_wall();
     void build_for_box();
+    void build_for_cylinder();
     void show_empty(const QString& message);
     void clear_form();
 
@@ -40,6 +41,7 @@ private:
 
     void commit_wall_edit();
     void commit_box_edit();
+    void commit_cylinder_edit();
 
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;
