@@ -150,6 +150,13 @@ void PropertiesPanel::build_for_box() {
     auto* height = make_mm_field(b->height);
     height->setMinimum(1.0);
     auto* base_z = make_mm_field(b->base_z);
+    auto* rotation = new QDoubleSpinBox(this);
+    rotation->setRange(-360.0, 360.0);
+    rotation->setDecimals(1);
+    rotation->setSingleStep(5.0);
+    rotation->setSuffix(" deg");
+    rotation->setValue(b->rotation_z * 180.0 / 3.14159265358979323846);
+    rotation->setKeyboardTracking(false);
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -157,8 +164,9 @@ void PropertiesPanel::build_for_box() {
     form_->addRow("Size Y (depth)", size_y);
     form_->addRow("Height", height);
     form_->addRow("Base Z", base_z);
+    form_->addRow("Rotation Z", rotation);
 
-    fields_ = {pos_x, pos_y, size_x, size_y, height, base_z};
+    fields_ = {pos_x, pos_y, size_x, size_y, height, base_z, rotation};
 
     for (auto* field : fields_) {
         connect(field, &QDoubleSpinBox::editingFinished, this,
@@ -190,7 +198,7 @@ void PropertiesPanel::commit_wall_edit() {
 }
 
 void PropertiesPanel::commit_box_edit() {
-    if (suppress_commit_ || !current_.valid() || fields_.size() != 6) return;
+    if (suppress_commit_ || !current_.valid() || fields_.size() != 7) return;
     const auto* b = document_.find_box(current_.id);
     if (!b) return;
 
@@ -201,9 +209,11 @@ void PropertiesPanel::commit_box_edit() {
     after.size_xy.y() = fields_[3]->value();
     after.height = fields_[4]->value();
     after.base_z = fields_[5]->value();
+    after.rotation_z = fields_[6]->value() * 3.14159265358979323846 / 180.0;
 
     if (after.position == b->position && after.size_xy == b->size_xy &&
-        after.height == b->height && after.base_z == b->base_z) {
+        after.height == b->height && after.base_z == b->base_z &&
+        after.rotation_z == b->rotation_z) {
         return;
     }
 

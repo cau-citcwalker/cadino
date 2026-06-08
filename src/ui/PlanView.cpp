@@ -233,13 +233,28 @@ void PlanView::draw_boxes(QPainter& p) {
     p.setBrush(QColor(210, 165, 110, 110));
 
     for (const auto& [id, b] : document_.boxes()) {
-        const QPointF a_m(b.position.x() - b.size_xy.x() * 0.5,
-                          b.position.y() - b.size_xy.y() * 0.5);
-        const QPointF c_m(b.position.x() + b.size_xy.x() * 0.5,
-                          b.position.y() + b.size_xy.y() * 0.5);
-        const QPointF a_s = model_to_screen(a_m);
-        const QPointF c_s = model_to_screen(c_m);
-        p.drawRect(QRectF(a_s, c_s).normalized());
+        const double hx = b.size_xy.x() * 0.5;
+        const double hy = b.size_xy.y() * 0.5;
+        const double c = std::cos(b.rotation_z);
+        const double s = std::sin(b.rotation_z);
+        const auto rot = [&](double x, double y) {
+            return QPointF(b.position.x() + c * x - s * y,
+                           b.position.y() + s * x + c * y);
+        };
+
+        QPolygonF poly;
+        poly << model_to_screen(rot(-hx, -hy))
+             << model_to_screen(rot( hx, -hy))
+             << model_to_screen(rot( hx,  hy))
+             << model_to_screen(rot(-hx,  hy));
+        p.drawPolygon(poly);
+
+        QPen dir_pen(QColor(120, 80, 40, 200), 1);
+        dir_pen.setCosmetic(true);
+        p.setPen(dir_pen);
+        p.drawLine(model_to_screen({b.position.x(), b.position.y()}),
+                   model_to_screen(rot(hx, 0.0)));
+        p.setPen(box_pen);
     }
 }
 

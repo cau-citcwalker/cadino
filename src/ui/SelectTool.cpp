@@ -30,8 +30,13 @@ double distance_point_to_segment(QPointF p, QPointF a, QPointF b) {
 bool point_in_box_footprint(QPointF p, const cadino::core::Box& b) {
     const double hx = b.size_xy.x() * 0.5;
     const double hy = b.size_xy.y() * 0.5;
-    return std::abs(p.x() - b.position.x()) <= hx &&
-           std::abs(p.y() - b.position.y()) <= hy;
+    const double dx = p.x() - b.position.x();
+    const double dy = p.y() - b.position.y();
+    const double c = std::cos(-b.rotation_z);
+    const double s = std::sin(-b.rotation_z);
+    const double lx = c * dx - s * dy;
+    const double ly = s * dx + c * dy;
+    return std::abs(lx) <= hx && std::abs(ly) <= hy;
 }
 
 }  // namespace
@@ -144,12 +149,20 @@ void SelectTool::paint_overlay(QPainter& p, const PlanView& view) const {
     } else if (sel.kind == SelectKind::Box) {
         const auto* b = view.document().find_box(sel.id);
         if (!b) return;
-        const QPointF a_m(b->position.x() - b->size_xy.x() * 0.5,
-                          b->position.y() - b->size_xy.y() * 0.5);
-        const QPointF c_m(b->position.x() + b->size_xy.x() * 0.5,
-                          b->position.y() + b->size_xy.y() * 0.5);
-        p.drawRect(QRectF(view.model_to_screen(a_m),
-                          view.model_to_screen(c_m)).normalized());
+        const double hx = b->size_xy.x() * 0.5;
+        const double hy = b->size_xy.y() * 0.5;
+        const double c = std::cos(b->rotation_z);
+        const double s = std::sin(b->rotation_z);
+        const auto rot = [&](double x, double y) {
+            return QPointF(b->position.x() + c * x - s * y,
+                           b->position.y() + s * x + c * y);
+        };
+        QPolygonF poly;
+        poly << view.model_to_screen(rot(-hx, -hy))
+             << view.model_to_screen(rot( hx, -hy))
+             << view.model_to_screen(rot( hx,  hy))
+             << view.model_to_screen(rot(-hx,  hy));
+        p.drawPolygon(poly);
     }
 }
 

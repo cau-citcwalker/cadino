@@ -50,10 +50,16 @@ SnapResult SnapEngine::snap(QPointF model_pos,
         for (const auto& [id, b] : doc.boxes()) {
             const double hx = b.size_xy.x() * 0.5;
             const double hy = b.size_xy.y() * 0.5;
-            consider({b.position.x() - hx, b.position.y() - hy}, SnapKind::Corner);
-            consider({b.position.x() + hx, b.position.y() - hy}, SnapKind::Corner);
-            consider({b.position.x() + hx, b.position.y() + hy}, SnapKind::Corner);
-            consider({b.position.x() - hx, b.position.y() + hy}, SnapKind::Corner);
+            const double c = std::cos(b.rotation_z);
+            const double s = std::sin(b.rotation_z);
+            const auto rot = [&](double x, double y) {
+                return QPointF(b.position.x() + c * x - s * y,
+                               b.position.y() + s * x + c * y);
+            };
+            consider(rot(-hx, -hy), SnapKind::Corner);
+            consider(rot( hx, -hy), SnapKind::Corner);
+            consider(rot( hx,  hy), SnapKind::Corner);
+            consider(rot(-hx,  hy), SnapKind::Corner);
         }
     }
 

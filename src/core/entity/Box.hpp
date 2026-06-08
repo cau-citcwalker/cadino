@@ -12,6 +12,7 @@ struct Box {
     Eigen::Vector2d size_xy{600.0, 600.0};
     double height{750.0};
     double base_z{0.0};
+    double rotation_z{0.0};  // radians, around vertical axis at position
 };
 
 }  // namespace cadino::core

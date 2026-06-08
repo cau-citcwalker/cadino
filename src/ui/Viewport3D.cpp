@@ -41,6 +41,7 @@ uniform vec3 u_base_color;
 
 void main() {
     vec3 N = normalize(v_normal);
+    if (!gl_FrontFacing) N = -N;
     float diff = max(dot(N, -normalize(u_light_dir)), 0.0);
     vec3 col = u_base_color * (0.25 + 0.75 * diff);
     frag_color = vec4(col, 1.0);
@@ -61,18 +62,22 @@ void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c
     v(a); v(c); v(d);
 }
 
-void push_axis_box(std::vector<Vertex>& verts, QVector3D min, QVector3D max) {
-    const QVector3D b0(min.x(), min.y(), min.z());
-    const QVector3D b1(max.x(), min.y(), min.z());
-    const QVector3D b2(max.x(), max.y(), min.z());
-    const QVector3D b3(min.x(), max.y(), min.z());
-    const QVector3D t0(min.x(), min.y(), max.z());
-    const QVector3D t1(max.x(), min.y(), max.z());
-    const QVector3D t2(max.x(), max.y(), max.z());
-    const QVector3D t3(min.x(), max.y(), max.z());
-    const QVector3D xp(1.0f, 0.0f, 0.0f);
-    const QVector3D yp(0.0f, 1.0f, 0.0f);
+void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, float hy,
+                       float zmin, float zmax, float yaw) {
+    const float c = std::cos(yaw);
+    const float s = std::sin(yaw);
+    const QVector3D xp(c, s, 0.0f);
+    const QVector3D yp(-s, c, 0.0f);
     const QVector3D zp(0.0f, 0.0f, 1.0f);
+
+    const QVector3D b0 = center + (-hx) * xp + (-hy) * yp + QVector3D(0, 0, zmin);
+    const QVector3D b1 = center + ( hx) * xp + (-hy) * yp + QVector3D(0, 0, zmin);
+    const QVector3D b2 = center + ( hx) * xp + ( hy) * yp + QVector3D(0, 0, zmin);
+    const QVector3D b3 = center + (-hx) * xp + ( hy) * yp + QVector3D(0, 0, zmin);
+    const QVector3D t0(b0.x(), b0.y(), zmax);
+    const QVector3D t1(b1.x(), b1.y(), zmax);
+    const QVector3D t2(b2.x(), b2.y(), zmax);
+    const QVector3D t3(b3.x(), b3.y(), zmax);
 
     push_quad(verts, t0, t1, t2, t3, zp);
     push_quad(verts, b3, b2, b1, b0, -zp);
@@ -142,9 +147,7 @@ void Viewport3D::initializeGL() {
     initializeOpenGLFunctions();
     glClearColor(0.12f, 0.13f, 0.16f, 1.0f);
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
+    glDisable(GL_CULL_FACE);
 
     program_ = std::make_unique<QOpenGLShaderProgram>();
     if (!program_->addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShader)) {
@@ -176,13 +179,14 @@ void Viewport3D::rebuild_mesh() {
     }
     const std::size_t walls_end = verts.size();
     for (const auto& [id, b] : document_.boxes()) {
-        const QVector3D min(static_cast<float>(b.position.x() - b.size_xy.x() * 0.5),
-                            static_cast<float>(b.position.y() - b.size_xy.y() * 0.5),
-                            static_cast<float>(b.base_z));
-        const QVector3D max(static_cast<float>(b.position.x() + b.size_xy.x() * 0.5),
-                            static_cast<float>(b.position.y() + b.size_xy.y() * 0.5),
-                            static_cast<float>(b.base_z + b.height));
-        push_axis_box(verts, min, max);
+        const QVector3D center(static_cast<float>(b.position.x()),
+                               static_cast<float>(b.position.y()), 0.0f);
+        push_oriented_box(verts, center,
+                          static_cast<float>(b.size_xy.x() * 0.5),
+                          static_cast<float>(b.size_xy.y() * 0.5),
+                          static_cast<float>(b.base_z),
+                          static_cast<float>(b.base_z + b.height),
+                          static_cast<float>(b.rotation_z));
     }
     walls_vertex_end_ = static_cast<int>(walls_end);
 
