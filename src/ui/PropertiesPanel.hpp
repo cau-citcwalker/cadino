@@ -5,10 +5,12 @@
 #include <QWidget>
 
 #include "Selection.hpp"
+#include "entity/Color.hpp"
 
 class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
+class QPushButton;
 
 namespace cadino::core {
 class Document;
@@ -38,6 +40,7 @@ private:
     void clear_form();
 
     QDoubleSpinBox* make_mm_field(double value);
+    QPushButton* make_color_button(float r, float g, float b);
 
     void commit_wall_edit();
     void commit_box_edit();
@@ -53,6 +56,8 @@ private:
     QLabel* title_{nullptr};
     QLabel* empty_label_{nullptr};
     std::vector<QDoubleSpinBox*> fields_;
+    QPushButton* color_button_{nullptr};
+    cadino::core::Color current_color_{};
     bool suppress_commit_{false};
 };
 

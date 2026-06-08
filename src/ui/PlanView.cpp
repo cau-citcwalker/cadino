@@ -95,13 +95,13 @@ void PlanView::paintEvent(QPaintEvent*) {
 }
 
 void PlanView::draw_cylinders(QPainter& p) {
-    QPen pen(QColor(40, 90, 120));
+    QPen pen(QColor(40, 40, 40));
     pen.setCosmetic(true);
     pen.setWidth(2);
     p.setPen(pen);
-    p.setBrush(QColor(140, 195, 215, 110));
 
     for (const auto& [id, c] : document_.cylinders()) {
+        p.setBrush(QColor::fromRgbF(c.color.r, c.color.g, c.color.b, 0.55f));
         const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
         const double r_s = c.radius * zoom_;
         p.drawEllipse(center_s, r_s, r_s);
@@ -214,9 +214,9 @@ void PlanView::draw_walls(QPainter& p) {
     wall_pen.setCosmetic(true);
     wall_pen.setWidth(2);
     p.setPen(wall_pen);
-    p.setBrush(QColor(170, 170, 170, 120));
 
     for (const auto& [id, w] : document_.walls()) {
+        p.setBrush(QColor::fromRgbF(w.color.r, w.color.g, w.color.b, 0.55f));
         const QPointF start_m{w.start.x(), w.start.y()};
         const QPointF end_m{w.end.x(), w.end.y()};
 
@@ -242,13 +242,13 @@ void PlanView::draw_walls(QPainter& p) {
 }
 
 void PlanView::draw_boxes(QPainter& p) {
-    QPen box_pen(QColor(120, 80, 40));
+    QPen box_pen(QColor(40, 40, 40));
     box_pen.setCosmetic(true);
     box_pen.setWidth(2);
     p.setPen(box_pen);
-    p.setBrush(QColor(210, 165, 110, 110));
 
     for (const auto& [id, b] : document_.boxes()) {
+        p.setBrush(QColor::fromRgbF(b.color.r, b.color.g, b.color.b, 0.55f));
         const double hx = b.size_xy.x() * 0.5;
         const double hy = b.size_xy.y() * 0.5;
         const double c = std::cos(b.rotation_z);

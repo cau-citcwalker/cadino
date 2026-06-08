@@ -1,8 +1,10 @@
 #include "PropertiesPanel.hpp"
 
+#include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QVBoxLayout>
 
 #include "PlanView.hpp"
@@ -99,6 +101,30 @@ QDoubleSpinBox* PropertiesPanel::make_mm_field(double value) {
     return box;
 }
 
+QPushButton* PropertiesPanel::make_color_button(float r, float g, float b) {
+    auto* btn = new QPushButton(this);
+    btn->setFixedHeight(28);
+    current_color_ = {r, g, b};
+    btn->setStyleSheet(QString("background-color: rgb(%1, %2, %3); border: 1px solid #555;")
+                           .arg(int(r * 255)).arg(int(g * 255)).arg(int(b * 255)));
+    btn->setText("");
+    connect(btn, &QPushButton::clicked, this, [this, btn] {
+        const QColor initial = QColor::fromRgbF(current_color_.r, current_color_.g,
+                                                current_color_.b);
+        const QColor picked = QColorDialog::getColor(initial, this, "Pick entity color");
+        if (!picked.isValid()) return;
+        current_color_ = {static_cast<float>(picked.redF()),
+                          static_cast<float>(picked.greenF()),
+                          static_cast<float>(picked.blueF())};
+        btn->setStyleSheet(QString("background-color: %1; border: 1px solid #555;")
+                               .arg(picked.name()));
+        if (current_.kind == SelectKind::Wall) commit_wall_edit();
+        else if (current_.kind == SelectKind::Box) commit_box_edit();
+        else if (current_.kind == SelectKind::Cylinder) commit_cylinder_edit();
+    });
+    return btn;
+}
+
 void PropertiesPanel::build_for_wall() {
     const auto* w = document_.find_wall(current_.id);
     if (!w) {
@@ -120,12 +146,15 @@ void PropertiesPanel::build_for_wall() {
     auto* thickness = make_mm_field(w->thickness);
     thickness->setMinimum(1.0);
 
+    color_button_ = make_color_button(w->color.r, w->color.g, w->color.b);
+
     form_->addRow("Start X", start_x);
     form_->addRow("Start Y", start_y);
     form_->addRow("End X", end_x);
     form_->addRow("End Y", end_y);
     form_->addRow("Height", height);
     form_->addRow("Thickness", thickness);
+    form_->addRow("Color", color_button_);
 
     fields_ = {start_x, start_y, end_x, end_y, height, thickness};
 
@@ -165,6 +194,8 @@ void PropertiesPanel::build_for_box() {
     rotation->setValue(b->rotation_z * 180.0 / 3.14159265358979323846);
     rotation->setKeyboardTracking(false);
 
+    color_button_ = make_color_button(b->color.r, b->color.g, b->color.b);
+
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
     form_->addRow("Size X (width)", size_x);
@@ -172,6 +203,7 @@ void PropertiesPanel::build_for_box() {
     form_->addRow("Height", height);
     form_->addRow("Base Z", base_z);
     form_->addRow("Rotation Z", rotation);
+    form_->addRow("Color", color_button_);
 
     fields_ = {pos_x, pos_y, size_x, size_y, height, base_z, rotation};
 
@@ -202,11 +234,14 @@ void PropertiesPanel::build_for_cylinder() {
     height->setMinimum(1.0);
     auto* base_z = make_mm_field(c->base_z);
 
+    color_button_ = make_color_button(c->color.r, c->color.g, c->color.b);
+
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
     form_->addRow("Radius", radius);
     form_->addRow("Height", height);
     form_->addRow("Base Z", base_z);
+    form_->addRow("Color", color_button_);
 
     fields_ = {pos_x, pos_y, radius, height, base_z};
 
@@ -228,9 +263,11 @@ void PropertiesPanel::commit_cylinder_edit() {
     after.radius = fields_[2]->value();
     after.height = fields_[3]->value();
     after.base_z = fields_[4]->value();
+    after.color = current_color_;
 
     if (after.position == c->position && after.radius == c->radius &&
-        after.height == c->height && after.base_z == c->base_z) {
+        after.height == c->height && after.base_z == c->base_z &&
+        after.color == c->color) {
         return;
     }
 
@@ -250,9 +287,11 @@ void PropertiesPanel::commit_wall_edit() {
     after.end.y() = fields_[3]->value();
     after.height = fields_[4]->value();
     after.thickness = fields_[5]->value();
+    after.color = current_color_;
 
     if (after.start == w->start && after.end == w->end &&
-        after.height == w->height && after.thickness == w->thickness) {
+        after.height == w->height && after.thickness == w->thickness &&
+        after.color == w->color) {
         return;
     }
 
@@ -273,10 +312,11 @@ void PropertiesPanel::commit_box_edit() {
     after.height = fields_[4]->value();
     after.base_z = fields_[5]->value();
     after.rotation_z = fields_[6]->value() * 3.14159265358979323846 / 180.0;
+    after.color = current_color_;
 
     if (after.position == b->position && after.size_xy == b->size_xy &&
         after.height == b->height && after.base_z == b->base_z &&
-        after.rotation_z == b->rotation_z) {
+        after.rotation_z == b->rotation_z && after.color == b->color) {
         return;
     }
 

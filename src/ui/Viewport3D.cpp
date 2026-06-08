@@ -20,13 +20,16 @@ constexpr const char* kVertexShader = R"(
 #version 330 core
 layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec3 a_color;
 
 uniform mat4 u_view_proj;
 
 out vec3 v_normal;
+out vec3 v_color;
 
 void main() {
     v_normal = a_normal;
+    v_color = a_color;
     gl_Position = u_view_proj * vec4(a_pos, 1.0);
 }
 )";
@@ -34,16 +37,16 @@ void main() {
 constexpr const char* kFragmentShader = R"(
 #version 330 core
 in vec3 v_normal;
+in vec3 v_color;
 out vec4 frag_color;
 
 uniform vec3 u_light_dir;
-uniform vec3 u_base_color;
 
 void main() {
     vec3 N = normalize(v_normal);
     if (!gl_FrontFacing) N = -N;
     float diff = max(dot(N, -normalize(u_light_dir)), 0.0);
-    vec3 col = u_base_color * (0.25 + 0.75 * diff);
+    vec3 col = v_color * (0.25 + 0.75 * diff);
     frag_color = vec4(col, 1.0);
 }
 )";
@@ -51,21 +54,26 @@ void main() {
 struct Vertex {
     float px, py, pz;
     float nx, ny, nz;
+    float cr, cg, cb;
 };
 
 void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c,
-               QVector3D d, QVector3D n) {
+               QVector3D d, QVector3D n, QVector3D color) {
     auto v = [&](QVector3D p) {
-        verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z()});
+        verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
+                          color.x(), color.y(), color.z()});
     };
     v(a); v(b); v(c);
     v(a); v(c); v(d);
 }
 
 void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
-                   float zmin, float zmax, int segments = 32) {
+                   float zmin, float zmax, QVector3D color, int segments = 32) {
     const float pi = std::numbers::pi_v<float>;
-    const QVector3D zp(0.0f, 0.0f, 1.0f);
+    const auto cv = [&](QVector3D p, QVector3D n) {
+        verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
+                         color.x(), color.y(), color.z()});
+    };
 
     for (int i = 0; i < segments; ++i) {
         const float a0 = 2.0f * pi * i / segments;
@@ -78,11 +86,13 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
         const QVector3D t0(center.x() + radius * c0, center.y() + radius * s0, zmax);
         const QVector3D t1(center.x() + radius * c1, center.y() + radius * s1, zmax);
         const QVector3D n((c0 + c1) * 0.5f, (s0 + s1) * 0.5f, 0.0f);
-        push_quad(verts, b0, b1, t1, t0, n);
+        push_quad(verts, b0, b1, t1, t0, n, color);
     }
 
     const QVector3D top_c(center.x(), center.y(), zmax);
     const QVector3D bot_c(center.x(), center.y(), zmin);
+    const QVector3D zp(0.0f, 0.0f, 1.0f);
+    const QVector3D zn(0.0f, 0.0f, -1.0f);
     for (int i = 0; i < segments; ++i) {
         const float a0 = 2.0f * pi * i / segments;
         const float a1 = 2.0f * pi * (i + 1) / segments;
@@ -90,22 +100,18 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
                             center.y() + radius * std::sin(a0), zmax);
         const QVector3D pt1(center.x() + radius * std::cos(a1),
                             center.y() + radius * std::sin(a1), zmax);
-        verts.push_back({top_c.x(), top_c.y(), top_c.z(), 0.0f, 0.0f, 1.0f});
-        verts.push_back({pt0.x(), pt0.y(), pt0.z(), 0.0f, 0.0f, 1.0f});
-        verts.push_back({pt1.x(), pt1.y(), pt1.z(), 0.0f, 0.0f, 1.0f});
+        cv(top_c, zp); cv(pt0, zp); cv(pt1, zp);
 
         const QVector3D pb0(center.x() + radius * std::cos(a0),
                             center.y() + radius * std::sin(a0), zmin);
         const QVector3D pb1(center.x() + radius * std::cos(a1),
                             center.y() + radius * std::sin(a1), zmin);
-        verts.push_back({bot_c.x(), bot_c.y(), bot_c.z(), 0.0f, 0.0f, -1.0f});
-        verts.push_back({pb1.x(), pb1.y(), pb1.z(), 0.0f, 0.0f, -1.0f});
-        verts.push_back({pb0.x(), pb0.y(), pb0.z(), 0.0f, 0.0f, -1.0f});
+        cv(bot_c, zn); cv(pb1, zn); cv(pb0, zn);
     }
 }
 
 void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, float hy,
-                       float zmin, float zmax, float yaw) {
+                       float zmin, float zmax, float yaw, QVector3D color) {
     const float c = std::cos(yaw);
     const float s = std::sin(yaw);
     const QVector3D xp(c, s, 0.0f);
@@ -121,12 +127,12 @@ void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, f
     const QVector3D t2(b2.x(), b2.y(), zmax);
     const QVector3D t3(b3.x(), b3.y(), zmax);
 
-    push_quad(verts, t0, t1, t2, t3, zp);
-    push_quad(verts, b3, b2, b1, b0, -zp);
-    push_quad(verts, b1, b2, t2, t1, xp);
-    push_quad(verts, b3, b0, t0, t3, -xp);
-    push_quad(verts, b2, b3, t3, t2, yp);
-    push_quad(verts, b0, b1, t1, t0, -yp);
+    push_quad(verts, t0, t1, t2, t3, zp, color);
+    push_quad(verts, b3, b2, b1, b0, -zp, color);
+    push_quad(verts, b1, b2, t2, t1, xp, color);
+    push_quad(verts, b3, b0, t0, t3, -xp, color);
+    push_quad(verts, b2, b3, t3, t2, yp, color);
+    push_quad(verts, b0, b1, t1, t0, -yp, color);
 }
 
 void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
@@ -153,12 +159,13 @@ void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
     const QVector3D t2 = b2 + h;
     const QVector3D t3 = b3 + h;
 
-    push_quad(verts, t0, t1, t2, t3, up);
-    push_quad(verts, b3, b2, b1, b0, -up);
-    push_quad(verts, b0, b1, t1, t0, normal);
-    push_quad(verts, b2, b3, t3, t2, -normal);
-    push_quad(verts, b1, b2, t2, t1, unit);
-    push_quad(verts, b3, b0, t0, t3, -unit);
+    const QVector3D color(w.color.r, w.color.g, w.color.b);
+    push_quad(verts, t0, t1, t2, t3, up, color);
+    push_quad(verts, b3, b2, b1, b0, -up, color);
+    push_quad(verts, b0, b1, t1, t0, normal, color);
+    push_quad(verts, b2, b3, t3, t2, -normal, color);
+    push_quad(verts, b1, b2, t2, t1, unit, color);
+    push_quad(verts, b3, b0, t0, t3, -unit, color);
 }
 
 void push_ground_grid(std::vector<Vertex>& verts, float size) {
@@ -167,7 +174,8 @@ void push_ground_grid(std::vector<Vertex>& verts, float size) {
     const QVector3D b(size, -size, 0.0f);
     const QVector3D c(size, size, 0.0f);
     const QVector3D d(-size, size, 0.0f);
-    push_quad(verts, a, b, c, d, up);
+    const QVector3D ground_color(0.18f, 0.20f, 0.24f);
+    push_quad(verts, a, b, c, d, up, ground_color);
 }
 
 }  // namespace
@@ -228,18 +236,18 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(b.size_xy.y() * 0.5),
                           static_cast<float>(b.base_z),
                           static_cast<float>(b.base_z + b.height),
-                          static_cast<float>(b.rotation_z));
+                          static_cast<float>(b.rotation_z),
+                          QVector3D(b.color.r, b.color.g, b.color.b));
     }
-    const std::size_t boxes_end = verts.size();
     for (const auto& [id, c] : document_.cylinders()) {
         const QVector3D center(static_cast<float>(c.position.x()),
                                static_cast<float>(c.position.y()), 0.0f);
         push_cylinder(verts, center, static_cast<float>(c.radius),
                       static_cast<float>(c.base_z),
-                      static_cast<float>(c.base_z + c.height));
+                      static_cast<float>(c.base_z + c.height),
+                      QVector3D(c.color.r, c.color.g, c.color.b));
     }
     walls_vertex_end_ = static_cast<int>(walls_end);
-    boxes_vertex_end_ = static_cast<int>(boxes_end);
 
     vao_.bind();
     vbo_.bind();
@@ -248,6 +256,8 @@ void Viewport3D::rebuild_mesh() {
     program_->enableAttributeArray(0);
     program_->setAttributeBuffer(1, GL_FLOAT, sizeof(float) * 3, 3, sizeof(Vertex));
     program_->enableAttributeArray(1);
+    program_->setAttributeBuffer(2, GL_FLOAT, sizeof(float) * 6, 3, sizeof(Vertex));
+    program_->enableAttributeArray(2);
     vbo_.release();
     vao_.release();
 
@@ -289,21 +299,7 @@ void Viewport3D::paintGL() {
     program_->setUniformValue("u_view_proj", vp);
     program_->setUniformValue("u_light_dir", QVector3D(-0.4f, -0.3f, -1.0f));
 
-    program_->setUniformValue("u_base_color", QVector3D(0.18f, 0.20f, 0.24f));
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    if (walls_vertex_end_ > 6) {
-        program_->setUniformValue("u_base_color", QVector3D(0.78f, 0.78f, 0.80f));
-        glDrawArrays(GL_TRIANGLES, 6, walls_vertex_end_ - 6);
-    }
-    if (boxes_vertex_end_ > walls_vertex_end_) {
-        program_->setUniformValue("u_base_color", QVector3D(0.78f, 0.62f, 0.40f));
-        glDrawArrays(GL_TRIANGLES, walls_vertex_end_, boxes_vertex_end_ - walls_vertex_end_);
-    }
-    if (vertex_count_ > boxes_vertex_end_) {
-        program_->setUniformValue("u_base_color", QVector3D(0.55f, 0.70f, 0.82f));
-        glDrawArrays(GL_TRIANGLES, boxes_vertex_end_, vertex_count_ - boxes_vertex_end_);
-    }
+    glDrawArrays(GL_TRIANGLES, 0, vertex_count_);
 
     vao_.release();
     program_->release();
