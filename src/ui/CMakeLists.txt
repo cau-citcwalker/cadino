@@ -11,6 +11,7 @@ add_library(cadino_ui STATIC
     Snap.cpp
     DocumentIO.cpp
     DxfExporter.cpp
+    BooleanOps.cpp
 )
 
 target_include_directories(cadino_ui
@@ -27,6 +28,8 @@ target_link_libraries(cadino_ui
         Qt6::OpenGLWidgets
     PRIVATE
         spdlog::spdlog
+        TKernel TKMath TKBRep TKG3d TKTopAlgo TKGeomAlgo TKGeomBase
+        TKPrim TKBO TKMesh TKShHealing
 )
 
 set_target_properties(cadino_ui PROPERTIES

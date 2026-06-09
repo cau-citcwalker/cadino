@@ -273,6 +273,23 @@ void Viewport3D::rebuild_mesh() {
                       static_cast<float>(c.base_z + c.height),
                       QVector3D(c.color.r, c.color.g, c.color.b));
     }
+    for (const auto& [id, m] : document_.meshes()) {
+        const QVector3D color(m.color.r, m.color.g, m.color.b);
+        for (std::size_t i = 0; i + 2 < m.indices.size(); i += 3) {
+            const auto& p0 = m.positions[m.indices[i]];
+            const auto& p1 = m.positions[m.indices[i + 1]];
+            const auto& p2 = m.positions[m.indices[i + 2]];
+            const auto& n0 = i < m.normals.size() ? m.normals[m.indices[i]] : Eigen::Vector3f::UnitZ();
+            const auto& n1 = i + 1 < m.normals.size() ? m.normals[m.indices[i + 1]] : Eigen::Vector3f::UnitZ();
+            const auto& n2 = i + 2 < m.normals.size() ? m.normals[m.indices[i + 2]] : Eigen::Vector3f::UnitZ();
+            verts.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
+                             color.x(), color.y(), color.z()});
+            verts.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
+                             color.x(), color.y(), color.z()});
+            verts.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
+                             color.x(), color.y(), color.z()});
+        }
+    }
     for (const auto& [id, s] : document_.slabs()) {
         if (s.outline.size() < 3) continue;
         double minx = s.outline[0].x(), miny = s.outline[0].y();

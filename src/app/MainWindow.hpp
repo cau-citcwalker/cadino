@@ -49,6 +49,7 @@ private:
     void delete_selected();
     void group_selected();
     void ungroup_selected();
+    void subtract_selected();
     void new_document();
     void open_document();
     bool save_document();

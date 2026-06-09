@@ -17,6 +17,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "BooleanOps.hpp"
 #include "BoxTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
@@ -179,6 +180,10 @@ void MainWindow::build_menu() {
     auto* ungroup_a = edit_menu->addAction("Un&group");
     ungroup_a->setShortcut(QKeySequence("Ctrl+Shift+G"));
     connect(ungroup_a, &QAction::triggered, this, &MainWindow::ungroup_selected);
+
+    auto* subtract_a = edit_menu->addAction("Su&btract");
+    subtract_a->setShortcut(QKeySequence("Ctrl+Minus"));
+    connect(subtract_a, &QAction::triggered, this, &MainWindow::subtract_selected);
 
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (Top)");
@@ -510,6 +515,30 @@ void MainWindow::group_selected() {
     }
     plan_view_->notify_document_modified();
     statusBar()->showMessage(QString("Grouped %1 entities").arg(selections.size()));
+}
+
+void MainWindow::subtract_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.size() != 2) {
+        statusBar()->showMessage("Subtract: select exactly two entities (target first, tool second)");
+        return;
+    }
+    const auto target = selections[0];
+    const auto tool = selections[1];
+    auto result = cadino::ui::subtract_entities(document_, target, tool);
+    if (!result) {
+        statusBar()->showMessage("Subtract failed (only Box/Cylinder targets currently supported)");
+        return;
+    }
+    const auto id = document_.add_mesh(std::move(*result));
+    if (target.kind == cadino::ui::SelectKind::Box) document_.remove_box(target.id);
+    else if (target.kind == cadino::ui::SelectKind::Cylinder) document_.remove_cylinder(target.id);
+    if (tool.kind == cadino::ui::SelectKind::Box) document_.remove_box(tool.id);
+    else if (tool.kind == cadino::ui::SelectKind::Cylinder) document_.remove_cylinder(tool.id);
+
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Created mesh from boolean cut (id=%1)").arg(id.value));
 }
 
 void MainWindow::ungroup_selected() {
