@@ -7,6 +7,8 @@
 #include <QPainter>
 #include <QWheelEvent>
 
+#include <algorithm>
+
 #include "Tool.hpp"
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
@@ -36,15 +38,39 @@ void PlanView::notify_document_modified() {
     update();
 }
 
-void PlanView::set_selection(Selection sel) {
-    if (selection_ == sel) return;
-    selection_ = sel;
-    emit selection_changed(selection_);
+void PlanView::set_selections(std::vector<Selection> sel) {
+    if (selections_ == sel) return;
+    selections_ = std::move(sel);
+    emit selection_changed();
     update();
 }
 
+void PlanView::add_to_selection(Selection sel) {
+    if (is_selected(sel)) return;
+    selections_.push_back(sel);
+    emit selection_changed();
+    update();
+}
+
+void PlanView::remove_from_selection(Selection sel) {
+    const auto it = std::find(selections_.begin(), selections_.end(), sel);
+    if (it == selections_.end()) return;
+    selections_.erase(it);
+    emit selection_changed();
+    update();
+}
+
+void PlanView::toggle_selection(Selection sel) {
+    if (is_selected(sel)) remove_from_selection(sel);
+    else add_to_selection(sel);
+}
+
 void PlanView::clear_selection() {
-    set_selection(Selection{});
+    set_selections({});
+}
+
+bool PlanView::is_selected(Selection sel) const noexcept {
+    return std::find(selections_.begin(), selections_.end(), sel) != selections_.end();
 }
 
 void PlanView::set_tool(std::unique_ptr<Tool> tool) {

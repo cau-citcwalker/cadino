@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <QPointF>
 #include <QTransform>
@@ -39,16 +40,25 @@ public:
 
     void notify_document_modified();
 
-    [[nodiscard]] const Selection& selection() const noexcept { return selection_; }
-    void set_selection(Selection sel);
+    [[nodiscard]] const std::vector<Selection>& selections() const noexcept {
+        return selections_;
+    }
+    [[nodiscard]] Selection primary_selection() const noexcept {
+        return selections_.empty() ? Selection{} : selections_.front();
+    }
+    void set_selections(std::vector<Selection> sel);
+    void add_to_selection(Selection sel);
+    void remove_from_selection(Selection sel);
+    void toggle_selection(Selection sel);
     void clear_selection();
+    [[nodiscard]] bool is_selected(Selection sel) const noexcept;
 
     [[nodiscard]] SnapEngine& snap_engine() noexcept { return snap_; }
     [[nodiscard]] const SnapResult& last_snap() const noexcept { return last_snap_; }
 
 signals:
     void document_modified();
-    void selection_changed(const Selection& sel);
+    void selection_changed();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -80,7 +90,7 @@ private:
     bool panning_{false};
     QPointF last_pan_screen_{};
 
-    Selection selection_{};
+    std::vector<Selection> selections_;
 
     SnapEngine snap_;
     SnapResult last_snap_{};

@@ -46,8 +46,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
-    connect(plan_view_, &cadino::ui::PlanView::selection_changed, properties_,
-            &cadino::ui::PropertiesPanel::set_selection);
+    connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, [this] {
+        properties_->set_selection(plan_view_->primary_selection());
+    });
     connect(plan_view_, &cadino::ui::PlanView::document_modified, properties_,
             &cadino::ui::PropertiesPanel::refresh);
 
@@ -315,21 +316,23 @@ bool MainWindow::save_document_as() {
 }
 
 void MainWindow::delete_selected() {
-    const auto& sel = plan_view_->selection();
-    if (!sel.valid()) return;
+    const auto selections = plan_view_->selections();
+    if (selections.empty()) return;
 
-    switch (sel.kind) {
-        case cadino::ui::SelectKind::Wall:
-            stack_.execute(std::make_unique<cadino::core::RemoveWallCommand>(sel.id));
-            break;
-        case cadino::ui::SelectKind::Box:
-            stack_.execute(std::make_unique<cadino::core::RemoveBoxCommand>(sel.id));
-            break;
-        case cadino::ui::SelectKind::Cylinder:
-            stack_.execute(std::make_unique<cadino::core::RemoveCylinderCommand>(sel.id));
-            break;
-        case cadino::ui::SelectKind::None:
-            return;
+    for (const auto& sel : selections) {
+        switch (sel.kind) {
+            case cadino::ui::SelectKind::Wall:
+                stack_.execute(std::make_unique<cadino::core::RemoveWallCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::Box:
+                stack_.execute(std::make_unique<cadino::core::RemoveBoxCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::Cylinder:
+                stack_.execute(std::make_unique<cadino::core::RemoveCylinderCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::None:
+                break;
+        }
     }
     plan_view_->clear_selection();
     plan_view_->notify_document_modified();
