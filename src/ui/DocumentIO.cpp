@@ -45,6 +45,8 @@ QJsonObject to_json(const cadino::core::Wall& w) {
     o["height"] = w.height;
     o["thickness"] = w.thickness;
     o["color"] = color_array(w.color);
+    o["roughness"] = w.roughness;
+    o["metallic"] = w.metallic;
     return o;
 }
 
@@ -58,6 +60,8 @@ QJsonObject to_json(const cadino::core::Box& b) {
     o["base_z"] = b.base_z;
     o["rotation_z"] = b.rotation_z;
     o["color"] = color_array(b.color);
+    o["roughness"] = b.roughness;
+    o["metallic"] = b.metallic;
     return o;
 }
 
@@ -70,6 +74,8 @@ QJsonObject to_json(const cadino::core::Cylinder& c) {
     o["height"] = c.height;
     o["base_z"] = c.base_z;
     o["color"] = color_array(c.color);
+    o["roughness"] = c.roughness;
+    o["metallic"] = c.metallic;
     return o;
 }
 
@@ -84,6 +90,8 @@ cadino::core::Wall wall_from(const QJsonObject& o) {
     w.height = o["height"].toDouble(w.height);
     w.thickness = o["thickness"].toDouble(w.thickness);
     if (o.contains("color")) w.color = color_from(o["color"].toArray());
+    w.roughness = static_cast<float>(o["roughness"].toDouble(w.roughness));
+    w.metallic = static_cast<float>(o["metallic"].toDouble(w.metallic));
     return w;
 }
 
@@ -99,6 +107,8 @@ cadino::core::Box box_from(const QJsonObject& o) {
     b.base_z = o["base_z"].toDouble(b.base_z);
     b.rotation_z = o["rotation_z"].toDouble(b.rotation_z);
     if (o.contains("color")) b.color = color_from(o["color"].toArray());
+    b.roughness = static_cast<float>(o["roughness"].toDouble(b.roughness));
+    b.metallic = static_cast<float>(o["metallic"].toDouble(b.metallic));
     return b;
 }
 
@@ -180,6 +190,8 @@ cadino::core::Cylinder cylinder_from(const QJsonObject& o) {
     c.height = o["height"].toDouble(c.height);
     c.base_z = o["base_z"].toDouble(c.base_z);
     if (o.contains("color")) c.color = color_from(o["color"].toArray());
+    c.roughness = static_cast<float>(o["roughness"].toDouble(c.roughness));
+    c.metallic = static_cast<float>(o["metallic"].toDouble(c.metallic));
     return c;
 }
 

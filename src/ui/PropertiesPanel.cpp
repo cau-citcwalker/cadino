@@ -78,6 +78,9 @@ void PropertiesPanel::refresh() {
 
 void PropertiesPanel::clear_form() {
     fields_.clear();
+    roughness_field_ = nullptr;
+    metallic_field_ = nullptr;
+    color_button_ = nullptr;
     while (form_->rowCount() > 0) {
         form_->removeRow(0);
     }
@@ -96,6 +99,16 @@ QDoubleSpinBox* PropertiesPanel::make_mm_field(double value) {
     box->setDecimals(1);
     box->setSingleStep(10.0);
     box->setSuffix(" mm");
+    box->setValue(value);
+    box->setKeyboardTracking(false);
+    return box;
+}
+
+QDoubleSpinBox* PropertiesPanel::make_unit_field(double value) {
+    auto* box = new QDoubleSpinBox(this);
+    box->setRange(0.0, 1.0);
+    box->setDecimals(2);
+    box->setSingleStep(0.05);
     box->setValue(value);
     box->setKeyboardTracking(false);
     return box;
@@ -147,6 +160,8 @@ void PropertiesPanel::build_for_wall() {
     thickness->setMinimum(1.0);
 
     color_button_ = make_color_button(w->color.r, w->color.g, w->color.b);
+    roughness_field_ = make_unit_field(w->roughness);
+    metallic_field_ = make_unit_field(w->metallic);
 
     form_->addRow("Start X", start_x);
     form_->addRow("Start Y", start_y);
@@ -155,6 +170,8 @@ void PropertiesPanel::build_for_wall() {
     form_->addRow("Height", height);
     form_->addRow("Thickness", thickness);
     form_->addRow("Color", color_button_);
+    form_->addRow("Roughness", roughness_field_);
+    form_->addRow("Metallic", metallic_field_);
 
     fields_ = {start_x, start_y, end_x, end_y, height, thickness};
 
@@ -162,6 +179,10 @@ void PropertiesPanel::build_for_wall() {
         connect(field, &QDoubleSpinBox::editingFinished, this,
                 &PropertiesPanel::commit_wall_edit);
     }
+    connect(roughness_field_, &QDoubleSpinBox::editingFinished, this,
+            &PropertiesPanel::commit_wall_edit);
+    connect(metallic_field_, &QDoubleSpinBox::editingFinished, this,
+            &PropertiesPanel::commit_wall_edit);
     suppress_commit_ = false;
 }
 
@@ -195,6 +216,8 @@ void PropertiesPanel::build_for_box() {
     rotation->setKeyboardTracking(false);
 
     color_button_ = make_color_button(b->color.r, b->color.g, b->color.b);
+    roughness_field_ = make_unit_field(b->roughness);
+    metallic_field_ = make_unit_field(b->metallic);
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -204,6 +227,8 @@ void PropertiesPanel::build_for_box() {
     form_->addRow("Base Z", base_z);
     form_->addRow("Rotation Z", rotation);
     form_->addRow("Color", color_button_);
+    form_->addRow("Roughness", roughness_field_);
+    form_->addRow("Metallic", metallic_field_);
 
     fields_ = {pos_x, pos_y, size_x, size_y, height, base_z, rotation};
 
@@ -211,6 +236,10 @@ void PropertiesPanel::build_for_box() {
         connect(field, &QDoubleSpinBox::editingFinished, this,
                 &PropertiesPanel::commit_box_edit);
     }
+    connect(roughness_field_, &QDoubleSpinBox::editingFinished, this,
+            &PropertiesPanel::commit_box_edit);
+    connect(metallic_field_, &QDoubleSpinBox::editingFinished, this,
+            &PropertiesPanel::commit_box_edit);
     suppress_commit_ = false;
 }
 
@@ -235,6 +264,8 @@ void PropertiesPanel::build_for_cylinder() {
     auto* base_z = make_mm_field(c->base_z);
 
     color_button_ = make_color_button(c->color.r, c->color.g, c->color.b);
+    roughness_field_ = make_unit_field(c->roughness);
+    metallic_field_ = make_unit_field(c->metallic);
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -242,6 +273,8 @@ void PropertiesPanel::build_for_cylinder() {
     form_->addRow("Height", height);
     form_->addRow("Base Z", base_z);
     form_->addRow("Color", color_button_);
+    form_->addRow("Roughness", roughness_field_);
+    form_->addRow("Metallic", metallic_field_);
 
     fields_ = {pos_x, pos_y, radius, height, base_z};
 
@@ -249,6 +282,10 @@ void PropertiesPanel::build_for_cylinder() {
         connect(field, &QDoubleSpinBox::editingFinished, this,
                 &PropertiesPanel::commit_cylinder_edit);
     }
+    connect(roughness_field_, &QDoubleSpinBox::editingFinished, this,
+            &PropertiesPanel::commit_cylinder_edit);
+    connect(metallic_field_, &QDoubleSpinBox::editingFinished, this,
+            &PropertiesPanel::commit_cylinder_edit);
     suppress_commit_ = false;
 }
 
@@ -264,10 +301,13 @@ void PropertiesPanel::commit_cylinder_edit() {
     after.height = fields_[3]->value();
     after.base_z = fields_[4]->value();
     after.color = current_color_;
+    if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
+    if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
 
     if (after.position == c->position && after.radius == c->radius &&
         after.height == c->height && after.base_z == c->base_z &&
-        after.color == c->color) {
+        after.color == c->color && after.roughness == c->roughness &&
+        after.metallic == c->metallic) {
         return;
     }
 
@@ -288,10 +328,13 @@ void PropertiesPanel::commit_wall_edit() {
     after.height = fields_[4]->value();
     after.thickness = fields_[5]->value();
     after.color = current_color_;
+    if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
+    if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
 
     if (after.start == w->start && after.end == w->end &&
         after.height == w->height && after.thickness == w->thickness &&
-        after.color == w->color) {
+        after.color == w->color && after.roughness == w->roughness &&
+        after.metallic == w->metallic) {
         return;
     }
 
@@ -313,10 +356,13 @@ void PropertiesPanel::commit_box_edit() {
     after.base_z = fields_[5]->value();
     after.rotation_z = fields_[6]->value() * 3.14159265358979323846 / 180.0;
     after.color = current_color_;
+    if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
+    if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
 
     if (after.position == b->position && after.size_xy == b->size_xy &&
         after.height == b->height && after.base_z == b->base_z &&
-        after.rotation_z == b->rotation_z && after.color == b->color) {
+        after.rotation_z == b->rotation_z && after.color == b->color &&
+        after.roughness == b->roughness && after.metallic == b->metallic) {
         return;
     }
 

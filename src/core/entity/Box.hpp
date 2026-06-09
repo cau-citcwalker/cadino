@@ -16,6 +16,8 @@ struct Box {
     double base_z{0.0};
     double rotation_z{0.0};  // radians, around vertical axis at position
     Color color{0.78f, 0.62f, 0.40f};
+    float roughness{0.6f};
+    float metallic{0.0f};
 };
 
 }  // namespace cadino::core

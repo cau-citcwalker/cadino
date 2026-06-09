@@ -28,17 +28,22 @@ constexpr const char* kVertexShader = R"(
 layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec3 a_color;
+layout(location = 3) in vec2 a_material;
 
 uniform mat4 u_view_proj;
 uniform mat4 u_model;
 
 out vec3 v_normal;
 out vec3 v_color;
+out vec3 v_world;
+out vec2 v_material;
 
 void main() {
     vec4 wp = u_model * vec4(a_pos, 1.0);
     v_normal = a_normal;
     v_color = a_color;
+    v_world = wp.xyz;
+    v_material = a_material;
     gl_Position = u_view_proj * wp;
 }
 )";
@@ -47,10 +52,58 @@ constexpr const char* kFragmentShader = R"(
 #version 330 core
 in vec3 v_normal;
 in vec3 v_color;
+in vec3 v_world;
+in vec2 v_material;
 out vec4 frag_color;
 
 uniform vec3 u_light_dir;
+uniform vec3 u_eye_pos;
 uniform int u_shadow_mode;
+
+const float PI = 3.14159265358979323846;
+
+vec3 fresnel_schlick(float cos_theta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+}
+
+float distribution_ggx(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float ndoth = max(dot(N, H), 0.0);
+    float ndoth2 = ndoth * ndoth;
+    float denom = ndoth2 * (a2 - 1.0) + 1.0;
+    return a2 / (PI * denom * denom + 1e-7);
+}
+
+float geometry_schlick_ggx(float ndotv, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return ndotv / (ndotv * (1.0 - k) + k);
+}
+
+float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float ndotv = max(dot(N, V), 0.0);
+    float ndotl = max(dot(N, L), 0.0);
+    return geometry_schlick_ggx(ndotv, roughness) * geometry_schlick_ggx(ndotl, roughness);
+}
+
+vec3 brdf_lobe(vec3 N, vec3 V, vec3 L, vec3 light_color, vec3 albedo, float roughness, float metallic) {
+    vec3 H = normalize(V + L);
+    float ndotl = max(dot(N, L), 0.0);
+    if (ndotl <= 0.0) return vec3(0.0);
+
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    float NDF = distribution_ggx(N, H, roughness);
+    float G = geometry_smith(N, V, L, roughness);
+    vec3 F = fresnel_schlick(max(dot(H, V), 0.0), F0);
+
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * ndotl + 1e-5;
+    vec3 specular = numerator / denominator;
+
+    vec3 kd = (vec3(1.0) - F) * (1.0 - metallic);
+    return (kd * albedo / PI + specular) * light_color * ndotl;
+}
 
 void main() {
     if (u_shadow_mode == 1) {
@@ -60,16 +113,33 @@ void main() {
     vec3 N = normalize(v_normal);
     if (!gl_FrontFacing) N = -N;
 
-    vec3 key = -normalize(u_light_dir);
-    vec3 fill = normalize(vec3(0.5, 0.7, 0.6));
-    vec3 sky = vec3(0.0, 0.0, 1.0);
+    float roughness = clamp(v_material.x, 0.04, 1.0);
+    float metallic = clamp(v_material.y, 0.0, 1.0);
 
-    float key_d = max(dot(N, key), 0.0);
-    float fill_d = max(dot(N, fill), 0.0) * 0.35;
-    float sky_d = max(dot(N, sky), 0.0) * 0.20;
-    float ambient = 0.22;
+    vec3 V = normalize(u_eye_pos - v_world);
 
-    vec3 col = v_color * (ambient + key_d * 0.75 + fill_d + sky_d);
+    vec3 key_dir = -normalize(u_light_dir);
+    vec3 fill_dir = normalize(vec3(0.5, 0.7, 0.6));
+    vec3 sky_dir = vec3(0.0, 0.0, 1.0);
+
+    vec3 key_color = vec3(1.00, 0.96, 0.88) * 2.4;
+    vec3 fill_color = vec3(0.55, 0.65, 0.75) * 0.6;
+    vec3 sky_color = vec3(0.45, 0.55, 0.70) * 0.4;
+
+    vec3 Lo = vec3(0.0);
+    Lo += brdf_lobe(N, V, key_dir, key_color, v_color, roughness, metallic);
+    Lo += brdf_lobe(N, V, fill_dir, fill_color, v_color, roughness, metallic);
+    Lo += brdf_lobe(N, V, sky_dir, sky_color, v_color, roughness, metallic);
+
+    // Ambient term tinted with hemisphere lighting
+    float up = N.z * 0.5 + 0.5;
+    vec3 ambient_color = mix(vec3(0.12, 0.10, 0.09), vec3(0.30, 0.34, 0.40), up);
+    vec3 ambient = v_color * ambient_color * (1.0 - metallic * 0.6);
+
+    vec3 col = ambient + Lo;
+    // Reinhard tone mapping + slight gamma compensation
+    col = col / (col + vec3(1.0));
+    col = pow(col, vec3(1.0 / 2.2));
     frag_color = vec4(col, 1.0);
 }
 )";
@@ -78,24 +148,26 @@ struct Vertex {
     float px, py, pz;
     float nx, ny, nz;
     float cr, cg, cb;
+    float rough, metal;
 };
 
 void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c,
-               QVector3D d, QVector3D n, QVector3D color) {
+               QVector3D d, QVector3D n, QVector3D color, float rough, float metal) {
     auto v = [&](QVector3D p) {
         verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
-                          color.x(), color.y(), color.z()});
+                          color.x(), color.y(), color.z(), rough, metal});
     };
     v(a); v(b); v(c);
     v(a); v(c); v(d);
 }
 
 void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
-                   float zmin, float zmax, QVector3D color, int segments = 32) {
+                   float zmin, float zmax, QVector3D color, float rough, float metal,
+                   int segments = 32) {
     const float pi = std::numbers::pi_v<float>;
     const auto cv = [&](QVector3D p, QVector3D n) {
         verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
-                         color.x(), color.y(), color.z()});
+                         color.x(), color.y(), color.z(), rough, metal});
     };
 
     for (int i = 0; i < segments; ++i) {
@@ -136,7 +208,8 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
 }
 
 void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, float hy,
-                       float zmin, float zmax, float yaw, QVector3D color) {
+                       float zmin, float zmax, float yaw, QVector3D color,
+                       float rough, float metal) {
     const float c = std::cos(yaw);
     const float s = std::sin(yaw);
     const QVector3D xp(c, s, 0.0f);
@@ -152,12 +225,12 @@ void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, f
     const QVector3D t2(b2.x(), b2.y(), zmax);
     const QVector3D t3(b3.x(), b3.y(), zmax);
 
-    push_quad(verts, t0, t1, t2, t3, zp, color);
-    push_quad(verts, b3, b2, b1, b0, -zp, color);
-    push_quad(verts, b1, b2, t2, t1, xp, color);
-    push_quad(verts, b3, b0, t0, t3, -xp, color);
-    push_quad(verts, b2, b3, t3, t2, yp, color);
-    push_quad(verts, b0, b1, t1, t0, -yp, color);
+    push_quad(verts, t0, t1, t2, t3, zp, color, rough, metal);
+    push_quad(verts, b3, b2, b1, b0, -zp, color, rough, metal);
+    push_quad(verts, b1, b2, t2, t1, xp, color, rough, metal);
+    push_quad(verts, b3, b0, t0, t3, -xp, color, rough, metal);
+    push_quad(verts, b2, b3, t3, t2, yp, color, rough, metal);
+    push_quad(verts, b0, b1, t1, t0, -yp, color, rough, metal);
 }
 
 void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
@@ -185,12 +258,14 @@ void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
     const QVector3D t3 = b3 + h;
 
     const QVector3D color(w.color.r, w.color.g, w.color.b);
-    push_quad(verts, t0, t1, t2, t3, up, color);
-    push_quad(verts, b3, b2, b1, b0, -up, color);
-    push_quad(verts, b0, b1, t1, t0, normal, color);
-    push_quad(verts, b2, b3, t3, t2, -normal, color);
-    push_quad(verts, b1, b2, t2, t1, unit, color);
-    push_quad(verts, b3, b0, t0, t3, -unit, color);
+    const float r = w.roughness;
+    const float m = w.metallic;
+    push_quad(verts, t0, t1, t2, t3, up, color, r, m);
+    push_quad(verts, b3, b2, b1, b0, -up, color, r, m);
+    push_quad(verts, b0, b1, t1, t0, normal, color, r, m);
+    push_quad(verts, b2, b3, t3, t2, -normal, color, r, m);
+    push_quad(verts, b1, b2, t2, t1, unit, color, r, m);
+    push_quad(verts, b3, b0, t0, t3, -unit, color, r, m);
 }
 
 void push_ground_grid(std::vector<Vertex>& verts, float size) {
@@ -200,7 +275,7 @@ void push_ground_grid(std::vector<Vertex>& verts, float size) {
     const QVector3D c(size, size, 0.0f);
     const QVector3D d(-size, size, 0.0f);
     const QVector3D ground_color(0.18f, 0.20f, 0.24f);
-    push_quad(verts, a, b, c, d, up, ground_color);
+    push_quad(verts, a, b, c, d, up, ground_color, 0.95f, 0.0f);
 }
 
 }  // namespace
@@ -263,7 +338,8 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(b.base_z),
                           static_cast<float>(b.base_z + b.height),
                           static_cast<float>(b.rotation_z),
-                          QVector3D(b.color.r, b.color.g, b.color.b));
+                          QVector3D(b.color.r, b.color.g, b.color.b),
+                          b.roughness, b.metallic);
     }
     for (const auto& [id, c] : document_.cylinders()) {
         const QVector3D center(static_cast<float>(c.position.x()),
@@ -271,10 +347,13 @@ void Viewport3D::rebuild_mesh() {
         push_cylinder(verts, center, static_cast<float>(c.radius),
                       static_cast<float>(c.base_z),
                       static_cast<float>(c.base_z + c.height),
-                      QVector3D(c.color.r, c.color.g, c.color.b));
+                      QVector3D(c.color.r, c.color.g, c.color.b),
+                      c.roughness, c.metallic);
     }
     for (const auto& [id, m] : document_.meshes()) {
         const QVector3D color(m.color.r, m.color.g, m.color.b);
+        const float rough = m.roughness;
+        const float metal = m.metallic;
         for (std::size_t i = 0; i + 2 < m.indices.size(); i += 3) {
             const auto& p0 = m.positions[m.indices[i]];
             const auto& p1 = m.positions[m.indices[i + 1]];
@@ -283,11 +362,11 @@ void Viewport3D::rebuild_mesh() {
             const auto& n1 = i + 1 < m.normals.size() ? m.normals[m.indices[i + 1]] : Eigen::Vector3f::UnitZ();
             const auto& n2 = i + 2 < m.normals.size() ? m.normals[m.indices[i + 2]] : Eigen::Vector3f::UnitZ();
             verts.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
-                             color.x(), color.y(), color.z()});
+                             color.x(), color.y(), color.z(), rough, metal});
             verts.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
-                             color.x(), color.y(), color.z()});
+                             color.x(), color.y(), color.z(), rough, metal});
             verts.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
-                             color.x(), color.y(), color.z()});
+                             color.x(), color.y(), color.z(), rough, metal});
         }
     }
     for (const auto& [id, s] : document_.slabs()) {
@@ -305,7 +384,7 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(s.level),
                           static_cast<float>(s.level + s.thickness),
                           0.0f,
-                          QVector3D(0.72f, 0.65f, 0.55f));
+                          QVector3D(0.72f, 0.65f, 0.55f), 0.75f, 0.0f);
     }
     for (const auto& [id, d] : document_.doors()) {
         const auto* w = document_.find_wall(d.host_wall);
@@ -326,7 +405,7 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(d.sill_height),
                           static_cast<float>(d.sill_height + d.height),
                           yaw,
-                          QVector3D(0.55f, 0.35f, 0.20f));
+                          QVector3D(0.55f, 0.35f, 0.20f), 0.55f, 0.0f);
     }
     for (const auto& [id, win] : document_.windows()) {
         const auto* w = document_.find_wall(win.host_wall);
@@ -347,7 +426,7 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(win.sill_height),
                           static_cast<float>(win.sill_height + win.height),
                           yaw,
-                          QVector3D(0.65f, 0.80f, 0.90f));
+                          QVector3D(0.65f, 0.80f, 0.90f), 0.10f, 0.0f);
     }
     walls_vertex_end_ = static_cast<int>(walls_end);
 
@@ -360,6 +439,8 @@ void Viewport3D::rebuild_mesh() {
     program_->enableAttributeArray(1);
     program_->setAttributeBuffer(2, GL_FLOAT, sizeof(float) * 6, 3, sizeof(Vertex));
     program_->enableAttributeArray(2);
+    program_->setAttributeBuffer(3, GL_FLOAT, sizeof(float) * 9, 2, sizeof(Vertex));
+    program_->enableAttributeArray(3);
     vbo_.release();
     vao_.release();
 
@@ -368,16 +449,19 @@ void Viewport3D::rebuild_mesh() {
     mesh_dirty_ = false;
 }
 
-QMatrix4x4 Viewport3D::view_matrix() const {
+QVector3D Viewport3D::eye_position() const {
     const float yaw_rad = camera_yaw_ * static_cast<float>(std::numbers::pi) / 180.0f;
     const float pitch_rad = camera_pitch_ * static_cast<float>(std::numbers::pi) / 180.0f;
     const float cp = std::cos(pitch_rad);
     const QVector3D offset(camera_distance_ * std::cos(yaw_rad) * cp,
                            camera_distance_ * std::sin(yaw_rad) * cp,
                            camera_distance_ * std::sin(pitch_rad));
-    const QVector3D eye = camera_target_ + offset;
+    return camera_target_ + offset;
+}
+
+QMatrix4x4 Viewport3D::view_matrix() const {
     QMatrix4x4 v;
-    v.lookAt(eye, camera_target_, QVector3D(0.0f, 0.0f, 1.0f));
+    v.lookAt(eye_position(), camera_target_, QVector3D(0.0f, 0.0f, 1.0f));
     return v;
 }
 
@@ -424,6 +508,7 @@ void Viewport3D::paintGL() {
     const QMatrix4x4 vp = projection_matrix() * view_matrix();
     program_->setUniformValue("u_view_proj", vp);
     program_->setUniformValue("u_light_dir", QVector3D(-0.4f, -0.3f, -1.0f));
+    program_->setUniformValue("u_eye_pos", eye_position());
 
     QMatrix4x4 identity;
     program_->setUniformValue("u_model", identity);

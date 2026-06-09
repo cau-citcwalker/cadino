@@ -40,6 +40,7 @@ private:
     void clear_form();
 
     QDoubleSpinBox* make_mm_field(double value);
+    QDoubleSpinBox* make_unit_field(double value);
     QPushButton* make_color_button(float r, float g, float b);
 
     void commit_wall_edit();
@@ -56,6 +57,8 @@ private:
     QLabel* title_{nullptr};
     QLabel* empty_label_{nullptr};
     std::vector<QDoubleSpinBox*> fields_;
+    QDoubleSpinBox* roughness_field_{nullptr};
+    QDoubleSpinBox* metallic_field_{nullptr};
     QPushButton* color_button_{nullptr};
     cadino::core::Color current_color_{};
     bool suppress_commit_{false};

@@ -56,6 +56,7 @@ private:
     void rebuild_mesh();
     [[nodiscard]] QMatrix4x4 view_matrix() const;
     [[nodiscard]] QMatrix4x4 projection_matrix() const;
+    [[nodiscard]] QVector3D eye_position() const;
 
     struct Ray { QVector3D origin; QVector3D direction; };
     [[nodiscard]] Ray ray_from_screen(QPointF screen_pos) const;
