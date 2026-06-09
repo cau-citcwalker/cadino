@@ -54,13 +54,22 @@ uniform int u_shadow_mode;
 
 void main() {
     if (u_shadow_mode == 1) {
-        frag_color = vec4(0.02, 0.02, 0.04, 0.35);
+        frag_color = vec4(0.02, 0.02, 0.04, 0.30);
         return;
     }
     vec3 N = normalize(v_normal);
     if (!gl_FrontFacing) N = -N;
-    float diff = max(dot(N, -normalize(u_light_dir)), 0.0);
-    vec3 col = v_color * (0.25 + 0.75 * diff);
+
+    vec3 key = -normalize(u_light_dir);
+    vec3 fill = normalize(vec3(0.5, 0.7, 0.6));
+    vec3 sky = vec3(0.0, 0.0, 1.0);
+
+    float key_d = max(dot(N, key), 0.0);
+    float fill_d = max(dot(N, fill), 0.0) * 0.35;
+    float sky_d = max(dot(N, sky), 0.0) * 0.20;
+    float ambient = 0.22;
+
+    vec3 col = v_color * (ambient + key_d * 0.75 + fill_d + sky_d);
     frag_color = vec4(col, 1.0);
 }
 )";
