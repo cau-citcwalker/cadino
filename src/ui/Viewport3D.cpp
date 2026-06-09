@@ -92,8 +92,10 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
         const QVector3D b1(center.x() + radius * c1, center.y() + radius * s1, zmin);
         const QVector3D t0(center.x() + radius * c0, center.y() + radius * s0, zmax);
         const QVector3D t1(center.x() + radius * c1, center.y() + radius * s1, zmax);
-        const QVector3D n((c0 + c1) * 0.5f, (s0 + s1) * 0.5f, 0.0f);
-        push_quad(verts, b0, b1, t1, t0, n, color);
+        const QVector3D n0(c0, s0, 0.0f);
+        const QVector3D n1(c1, s1, 0.0f);
+        cv(b0, n0); cv(b1, n1); cv(t1, n1);
+        cv(b0, n0); cv(t1, n1); cv(t0, n0);
     }
 
     const QVector3D top_c(center.x(), center.y(), zmax);
