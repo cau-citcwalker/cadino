@@ -65,23 +65,49 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 MainWindow::~MainWindow() = default;
 
 void MainWindow::build_central_widget() {
-    splitter_ = new QSplitter(Qt::Horizontal, this);
+    splitter_ = new QSplitter(Qt::Vertical, this);
     splitter_->setHandleWidth(4);
     splitter_->setChildrenCollapsible(false);
 
-    plan_view_ = new cadino::ui::PlanView(document_, stack_, splitter_);
-    viewport_3d_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, splitter_);
+    top_row_ = new QSplitter(Qt::Horizontal, splitter_);
+    top_row_->setHandleWidth(4);
+    top_row_->setChildrenCollapsible(false);
 
-    connect(plan_view_, &cadino::ui::PlanView::document_modified, this, [this] {
+    bottom_row_ = new QSplitter(Qt::Horizontal, splitter_);
+    bottom_row_->setHandleWidth(4);
+    bottom_row_->setChildrenCollapsible(false);
+
+    plan_view_ = new cadino::ui::PlanView(document_, stack_, top_row_);
+    viewport_3d_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, top_row_);
+    front_view_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, bottom_row_);
+    side_view_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, bottom_row_);
+
+    front_view_->set_preset(cadino::ui::Viewport3D::CameraPreset::Front);
+    side_view_->set_preset(cadino::ui::Viewport3D::CameraPreset::Right);
+
+    auto refresh_all_3d = [this] {
         viewport_3d_->refresh();
+        front_view_->refresh();
+        side_view_->refresh();
+    };
+    connect(plan_view_, &cadino::ui::PlanView::document_modified, this, [this, refresh_all_3d] {
+        refresh_all_3d();
         update_undo_redo_actions();
     });
-    connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, [this] {
-        viewport_3d_->refresh();
-    });
+    connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, refresh_all_3d);
 
-    splitter_->addWidget(plan_view_);
-    splitter_->addWidget(viewport_3d_);
+    top_row_->addWidget(plan_view_);
+    top_row_->addWidget(viewport_3d_);
+    top_row_->setStretchFactor(0, 1);
+    top_row_->setStretchFactor(1, 1);
+
+    bottom_row_->addWidget(front_view_);
+    bottom_row_->addWidget(side_view_);
+    bottom_row_->setStretchFactor(0, 1);
+    bottom_row_->setStretchFactor(1, 1);
+
+    splitter_->addWidget(top_row_);
+    splitter_->addWidget(bottom_row_);
     splitter_->setStretchFactor(0, 1);
     splitter_->setStretchFactor(1, 1);
 
@@ -147,29 +173,50 @@ void MainWindow::build_menu() {
     connect(ungroup_a, &QAction::triggered, this, &MainWindow::ungroup_selected);
 
     auto* view_menu = menuBar()->addMenu("&View");
-    mode_plan_action_ = view_menu->addAction("&Plan (2D)");
+    mode_plan_action_ = view_menu->addAction("&Plan (Top)");
     mode_plan_action_->setCheckable(true);
     mode_plan_action_->setShortcut(QKeySequence("F2"));
     connect(mode_plan_action_, &QAction::triggered, this,
             [this] { set_view_mode(ViewMode::PlanOnly); });
 
-    mode_viewport_action_ = view_menu->addAction("&3D");
-    mode_viewport_action_->setCheckable(true);
-    mode_viewport_action_->setShortcut(QKeySequence("F3"));
-    connect(mode_viewport_action_, &QAction::triggered, this,
-            [this] { set_view_mode(ViewMode::ViewportOnly); });
+    mode_front_action_ = view_menu->addAction("&Front");
+    mode_front_action_->setCheckable(true);
+    mode_front_action_->setShortcut(QKeySequence("F3"));
+    connect(mode_front_action_, &QAction::triggered, this,
+            [this] { set_view_mode(ViewMode::FrontOnly); });
 
-    mode_split_action_ = view_menu->addAction("&Split");
+    mode_side_action_ = view_menu->addAction("S&ide");
+    mode_side_action_->setCheckable(true);
+    mode_side_action_->setShortcut(QKeySequence("F4"));
+    connect(mode_side_action_, &QAction::triggered, this,
+            [this] { set_view_mode(ViewMode::SideOnly); });
+
+    mode_iso_action_ = view_menu->addAction("&3D");
+    mode_iso_action_->setCheckable(true);
+    mode_iso_action_->setShortcut(QKeySequence("F5"));
+    connect(mode_iso_action_, &QAction::triggered, this,
+            [this] { set_view_mode(ViewMode::IsoOnly); });
+
+    mode_split_action_ = view_menu->addAction("&Split (2D + 3D)");
     mode_split_action_->setCheckable(true);
-    mode_split_action_->setShortcut(QKeySequence("F4"));
+    mode_split_action_->setShortcut(QKeySequence("F6"));
     connect(mode_split_action_, &QAction::triggered, this,
             [this] { set_view_mode(ViewMode::Split); });
+
+    mode_quad_action_ = view_menu->addAction("&Quad (4 views)");
+    mode_quad_action_->setCheckable(true);
+    mode_quad_action_->setShortcut(QKeySequence("F7"));
+    connect(mode_quad_action_, &QAction::triggered, this,
+            [this] { set_view_mode(ViewMode::Quad); });
 
     auto* mode_group = new QActionGroup(this);
     mode_group->setExclusive(true);
     mode_group->addAction(mode_plan_action_);
-    mode_group->addAction(mode_viewport_action_);
+    mode_group->addAction(mode_front_action_);
+    mode_group->addAction(mode_side_action_);
+    mode_group->addAction(mode_iso_action_);
     mode_group->addAction(mode_split_action_);
+    mode_group->addAction(mode_quad_action_);
 }
 
 void MainWindow::build_toolbar() {
@@ -228,8 +275,11 @@ void MainWindow::build_toolbar() {
     auto* view_bar = addToolBar("View");
     view_bar->setMovable(false);
     view_bar->addAction(mode_plan_action_);
-    view_bar->addAction(mode_viewport_action_);
+    view_bar->addAction(mode_front_action_);
+    view_bar->addAction(mode_side_action_);
+    view_bar->addAction(mode_iso_action_);
     view_bar->addAction(mode_split_action_);
+    view_bar->addAction(mode_quad_action_);
 
     auto* cam_bar = addToolBar("Camera");
     cam_bar->setMovable(false);
@@ -294,27 +344,50 @@ void MainWindow::activate_slab_tool() {
 
 void MainWindow::set_view_mode(ViewMode mode) {
     view_mode_ = mode;
+    plan_view_->setVisible(false);
+    viewport_3d_->setVisible(false);
+    front_view_->setVisible(false);
+    side_view_->setVisible(false);
+
     switch (mode) {
         case ViewMode::PlanOnly:
             plan_view_->setVisible(true);
-            viewport_3d_->setVisible(false);
             if (mode_plan_action_) mode_plan_action_->setChecked(true);
-            statusBar()->showMessage("View: 2D Plan only");
+            statusBar()->showMessage("View: Plan (Top) only");
             break;
-        case ViewMode::ViewportOnly:
-            plan_view_->setVisible(false);
+        case ViewMode::FrontOnly:
+            front_view_->setVisible(true);
+            if (mode_front_action_) mode_front_action_->setChecked(true);
+            statusBar()->showMessage("View: Front elevation only");
+            break;
+        case ViewMode::SideOnly:
+            side_view_->setVisible(true);
+            if (mode_side_action_) mode_side_action_->setChecked(true);
+            statusBar()->showMessage("View: Side elevation only");
+            break;
+        case ViewMode::IsoOnly:
             viewport_3d_->setVisible(true);
-            if (mode_viewport_action_) mode_viewport_action_->setChecked(true);
+            if (mode_iso_action_) mode_iso_action_->setChecked(true);
             statusBar()->showMessage("View: 3D only");
             break;
         case ViewMode::Split:
             plan_view_->setVisible(true);
             viewport_3d_->setVisible(true);
             if (mode_split_action_) mode_split_action_->setChecked(true);
-            splitter_->setSizes({splitter_->width() / 2, splitter_->width() / 2});
-            statusBar()->showMessage("View: Split (2D + 3D)");
+            statusBar()->showMessage("View: Split (Plan + 3D)");
+            break;
+        case ViewMode::Quad:
+            plan_view_->setVisible(true);
+            viewport_3d_->setVisible(true);
+            front_view_->setVisible(true);
+            side_view_->setVisible(true);
+            if (mode_quad_action_) mode_quad_action_->setChecked(true);
+            statusBar()->showMessage("View: Quad — Plan / 3D / Front / Side");
             break;
     }
+
+    top_row_->setVisible(plan_view_->isVisible() || viewport_3d_->isVisible());
+    bottom_row_->setVisible(front_view_->isVisible() || side_view_->isVisible());
 }
 
 void MainWindow::update_undo_redo_actions() {

@@ -20,8 +20,11 @@ namespace cadino::app {
 
 enum class ViewMode {
     PlanOnly,
-    ViewportOnly,
+    FrontOnly,
+    SideOnly,
+    IsoOnly,
     Split,
+    Quad,
 };
 
 class MainWindow : public QMainWindow {
@@ -58,8 +61,12 @@ private:
     cadino::core::CommandStack stack_{document_};
 
     QSplitter* splitter_{nullptr};
+    QSplitter* top_row_{nullptr};
+    QSplitter* bottom_row_{nullptr};
     cadino::ui::PlanView* plan_view_{nullptr};
     cadino::ui::Viewport3D* viewport_3d_{nullptr};
+    cadino::ui::Viewport3D* front_view_{nullptr};
+    cadino::ui::Viewport3D* side_view_{nullptr};
     cadino::ui::PropertiesPanel* properties_{nullptr};
 
     QAction* undo_action_{nullptr};
@@ -73,8 +80,11 @@ private:
     QAction* window_action_{nullptr};
     QAction* slab_action_{nullptr};
     QAction* mode_plan_action_{nullptr};
-    QAction* mode_viewport_action_{nullptr};
+    QAction* mode_front_action_{nullptr};
+    QAction* mode_side_action_{nullptr};
+    QAction* mode_iso_action_{nullptr};
     QAction* mode_split_action_{nullptr};
+    QAction* mode_quad_action_{nullptr};
 
     ViewMode view_mode_{ViewMode::Split};
     QString current_file_path_{};
