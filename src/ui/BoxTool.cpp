@@ -64,10 +64,30 @@ void BoxTool::paint_overlay(QPainter& p, const PlanView& view) const {
     p.setBrush(QColor(220, 130, 60, 40));
     const QPointF a = view.model_to_screen(*corner1_);
     const QPointF b = view.model_to_screen(hover_);
-    p.drawRect(QRectF(a, b).normalized());
+    const QRectF rect = QRectF(a, b).normalized();
+    p.drawRect(rect);
 
     p.setBrush(QColor(220, 130, 60));
     p.drawEllipse(a, 4, 4);
+
+    const double w_mm = std::abs(hover_.x() - corner1_->x());
+    const double d_mm = std::abs(hover_.y() - corner1_->y());
+    const QString label = QString("%1 × %2 mm")
+                              .arg(w_mm, 0, 'f', 1).arg(d_mm, 0, 'f', 1);
+
+    QFont font = p.font();
+    font.setBold(true);
+    p.setFont(font);
+    const QFontMetrics fm(font);
+    const QSize text_size = fm.size(0, label);
+    const QRectF bg(rect.center().x() - text_size.width() / 2.0 - 4,
+                    rect.top() - text_size.height() - 12,
+                    text_size.width() + 8, text_size.height() + 4);
+    p.setBrush(QColor(220, 130, 60, 220));
+    p.setPen(Qt::NoPen);
+    p.drawRoundedRect(bg, 3, 3);
+    p.setPen(Qt::white);
+    p.drawText(bg, Qt::AlignCenter, label);
 }
 
 }  // namespace cadino::ui

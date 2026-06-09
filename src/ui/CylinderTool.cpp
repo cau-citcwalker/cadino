@@ -68,6 +68,22 @@ void CylinderTool::paint_overlay(QPainter& p, const PlanView& view) const {
 
     p.setBrush(QColor(80, 160, 200));
     p.drawEllipse(c_s, 4, 4);
+
+    const QString label = QString("R: %1 mm  (⌀ %2 mm)")
+                              .arg(r_m, 0, 'f', 1).arg(r_m * 2.0, 0, 'f', 1);
+    QFont font = p.font();
+    font.setBold(true);
+    p.setFont(font);
+    const QFontMetrics fm(font);
+    const QSize text_size = fm.size(0, label);
+    const QRectF bg(c_s.x() - text_size.width() / 2.0 - 4,
+                    c_s.y() - r_s - text_size.height() - 12,
+                    text_size.width() + 8, text_size.height() + 4);
+    p.setBrush(QColor(80, 160, 200, 220));
+    p.setPen(Qt::NoPen);
+    p.drawRoundedRect(bg, 3, 3);
+    p.setPen(Qt::white);
+    p.drawText(bg, Qt::AlignCenter, label);
 }
 
 }  // namespace cadino::ui
