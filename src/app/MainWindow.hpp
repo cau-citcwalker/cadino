@@ -50,6 +50,7 @@ private:
     void open_document();
     bool save_document();
     bool save_document_as();
+    void export_dxf();
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();
 

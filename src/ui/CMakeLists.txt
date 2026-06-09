@@ -10,6 +10,7 @@ add_library(cadino_ui STATIC
     PropertiesPanel.cpp
     Snap.cpp
     DocumentIO.cpp
+    DxfExporter.cpp
 )
 
 target_include_directories(cadino_ui

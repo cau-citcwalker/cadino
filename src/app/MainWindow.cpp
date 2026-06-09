@@ -21,6 +21,7 @@
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
+#include "DxfExporter.hpp"
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
@@ -104,6 +105,10 @@ void MainWindow::build_menu() {
     auto* save_as_a = file_menu->addAction("Save &As...");
     save_as_a->setShortcut(QKeySequence::SaveAs);
     connect(save_as_a, &QAction::triggered, this, [this] { (void)save_document_as(); });
+
+    file_menu->addSeparator();
+    auto* export_dxf_a = file_menu->addAction("&Export DXF...");
+    connect(export_dxf_a, &QAction::triggered, this, &MainWindow::export_dxf);
 
     file_menu->addSeparator();
     file_menu->addAction("E&xit", this, &QWidget::close);
@@ -363,6 +368,20 @@ bool MainWindow::save_document() {
     }
     statusBar()->showMessage(QString("Saved %1").arg(current_file_path_));
     return true;
+}
+
+void MainWindow::export_dxf() {
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export DXF", current_file_path_, "AutoCAD DXF (*.dxf)");
+    if (path.isEmpty()) return;
+    if (!path.contains('.')) path += ".dxf";
+
+    QString error;
+    if (!cadino::ui::export_document_as_dxf(document_, path, &error)) {
+        QMessageBox::warning(this, "Export failed", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported DXF to %1").arg(path));
 }
 
 bool MainWindow::save_document_as() {
