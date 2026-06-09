@@ -3,9 +3,12 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QDockWidget>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QToolBar>
@@ -16,6 +19,7 @@
 
 #include "BoxTool.hpp"
 #include "CylinderTool.hpp"
+#include "DocumentIO.hpp"
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
@@ -79,9 +83,22 @@ void MainWindow::build_central_widget() {
 
 void MainWindow::build_menu() {
     auto* file_menu = menuBar()->addMenu("&File");
-    file_menu->addAction("&New");
-    file_menu->addAction("&Open...");
-    file_menu->addAction("&Save");
+    auto* new_a = file_menu->addAction("&New");
+    new_a->setShortcut(QKeySequence::New);
+    connect(new_a, &QAction::triggered, this, &MainWindow::new_document);
+
+    auto* open_a = file_menu->addAction("&Open...");
+    open_a->setShortcut(QKeySequence::Open);
+    connect(open_a, &QAction::triggered, this, &MainWindow::open_document);
+
+    auto* save_a = file_menu->addAction("&Save");
+    save_a->setShortcut(QKeySequence::Save);
+    connect(save_a, &QAction::triggered, this, [this] { (void)save_document(); });
+
+    auto* save_as_a = file_menu->addAction("Save &As...");
+    save_as_a->setShortcut(QKeySequence::SaveAs);
+    connect(save_as_a, &QAction::triggered, this, [this] { (void)save_document_as(); });
+
     file_menu->addSeparator();
     file_menu->addAction("E&xit", this, &QWidget::close);
 
@@ -229,6 +246,72 @@ void MainWindow::set_view_mode(ViewMode mode) {
 void MainWindow::update_undo_redo_actions() {
     undo_action_->setEnabled(stack_.can_undo());
     redo_action_->setEnabled(stack_.can_redo());
+}
+
+void MainWindow::new_document() {
+    if (QMessageBox::question(this, "New",
+            "Discard the current document and start a new one?") != QMessageBox::Yes) {
+        return;
+    }
+    document_ = cadino::core::Document{};
+    stack_.clear();
+    plan_view_->clear_selection();
+    plan_view_->update();
+    viewport_3d_->update();
+    update_undo_redo_actions();
+    current_file_path_.clear();
+    setWindowTitle("Cadino");
+    statusBar()->showMessage("New document");
+}
+
+void MainWindow::open_document() {
+    const QString path = QFileDialog::getOpenFileName(
+        this, "Open Cadino document", current_file_path_,
+        "Cadino documents (*.cadino);;JSON (*.json);;All files (*)");
+    if (path.isEmpty()) return;
+
+    QString error;
+    if (!cadino::ui::load_document_from_file(document_, path, &error)) {
+        QMessageBox::warning(this, "Open failed", error);
+        return;
+    }
+    stack_.clear();
+    plan_view_->clear_selection();
+    plan_view_->update();
+    viewport_3d_->update();
+    update_undo_redo_actions();
+    current_file_path_ = path;
+    setWindowTitle(QString("Cadino — %1").arg(QFileInfo(path).fileName()));
+    statusBar()->showMessage(QString("Opened %1").arg(path));
+}
+
+bool MainWindow::save_document() {
+    if (current_file_path_.isEmpty()) return save_document_as();
+    QString error;
+    if (!cadino::ui::save_document_to_file(document_, current_file_path_, &error)) {
+        QMessageBox::warning(this, "Save failed", error);
+        return false;
+    }
+    statusBar()->showMessage(QString("Saved %1").arg(current_file_path_));
+    return true;
+}
+
+bool MainWindow::save_document_as() {
+    QString path = QFileDialog::getSaveFileName(
+        this, "Save Cadino document", current_file_path_,
+        "Cadino documents (*.cadino);;JSON (*.json)");
+    if (path.isEmpty()) return false;
+    if (!path.contains('.')) path += ".cadino";
+
+    QString error;
+    if (!cadino::ui::save_document_to_file(document_, path, &error)) {
+        QMessageBox::warning(this, "Save failed", error);
+        return false;
+    }
+    current_file_path_ = path;
+    setWindowTitle(QString("Cadino — %1").arg(QFileInfo(path).fileName()));
+    statusBar()->showMessage(QString("Saved %1").arg(path));
+    return true;
 }
 
 void MainWindow::delete_selected() {

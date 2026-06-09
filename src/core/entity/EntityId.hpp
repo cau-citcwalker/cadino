@@ -14,9 +14,18 @@ struct EntityId {
     [[nodiscard]] constexpr bool valid() const noexcept { return value != 0; }
 };
 
-inline EntityId next_entity_id() noexcept {
+inline std::uint64_t& entity_id_counter() noexcept {
     static std::uint64_t counter = 0;
-    return EntityId{++counter};
+    return counter;
+}
+
+inline EntityId next_entity_id() noexcept {
+    return EntityId{++entity_id_counter()};
+}
+
+inline void seed_entity_id_at_least(std::uint64_t value) noexcept {
+    auto& c = entity_id_counter();
+    if (value > c) c = value;
 }
 
 }  // namespace cadino::core

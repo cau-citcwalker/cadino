@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QString>
 
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
@@ -39,6 +40,10 @@ private:
     void activate_box_tool();
     void activate_cylinder_tool();
     void delete_selected();
+    void new_document();
+    void open_document();
+    bool save_document();
+    bool save_document_as();
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();
 
@@ -62,6 +67,7 @@ private:
     QAction* mode_split_action_{nullptr};
 
     ViewMode view_mode_{ViewMode::Split};
+    QString current_file_path_{};
 };
 
 }  // namespace cadino::app
