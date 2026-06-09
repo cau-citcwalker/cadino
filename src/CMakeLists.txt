@@ -1,3 +1,6 @@
 add_subdirectory(core)
+if(CADINO_ENABLE_OPENNURBS)
+    add_subdirectory(io)
+endif()
 add_subdirectory(ui)
 add_subdirectory(app)

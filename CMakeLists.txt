@@ -33,6 +33,11 @@ find_package(spdlog CONFIG REQUIRED)
 
 qt_standard_project_setup()
 
+option(CADINO_ENABLE_OPENNURBS "Build with openNURBS .3dm import/export support" ON)
+if(CADINO_ENABLE_OPENNURBS)
+    add_subdirectory(third_party)
+endif()
+
 add_subdirectory(src)
 
 option(CADINO_BUILD_TESTS "Build unit tests" ON)

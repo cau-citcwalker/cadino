@@ -35,5 +35,6 @@ vcpkg_installed/
 Thumbs.db
 desktop.ini
 
-# Third-party fetched sources
-third_party/opennurbs/
+# Third-party fetched sources (now tracked as submodules; build dirs still ignored)
+third_party/opennurbs/build/
+third_party/opennurbs/out/

@@ -16,6 +16,11 @@ target_link_libraries(cadino
         spdlog::spdlog
 )
 
+if(CADINO_ENABLE_OPENNURBS)
+    target_link_libraries(cadino PRIVATE cadino_io)
+    target_compile_definitions(cadino PRIVATE CADINO_HAS_OPENNURBS=1)
+endif()
+
 set_target_properties(cadino PROPERTIES
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON

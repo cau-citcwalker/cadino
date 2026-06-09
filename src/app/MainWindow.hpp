@@ -55,6 +55,8 @@ private:
     bool save_document();
     bool save_document_as();
     void export_dxf();
+    void import_3dm();
+    void export_3dm();
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();
 

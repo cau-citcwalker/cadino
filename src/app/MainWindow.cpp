@@ -33,6 +33,10 @@
 
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
+
+#ifdef CADINO_HAS_OPENNURBS
+#include "RhinoIO.hpp"
+#endif
 #include "command/WallCommands.hpp"
 
 namespace cadino::app {
@@ -142,8 +146,21 @@ void MainWindow::build_menu() {
     connect(save_as_a, &QAction::triggered, this, [this] { (void)save_document_as(); });
 
     file_menu->addSeparator();
-    auto* export_dxf_a = file_menu->addAction("&Export DXF...");
+    auto* import_3dm_a = file_menu->addAction("&Import Rhino 3DM...");
+    connect(import_3dm_a, &QAction::triggered, this, &MainWindow::import_3dm);
+
+    auto* export_3dm_a = file_menu->addAction("E&xport Rhino 3DM...");
+    connect(export_3dm_a, &QAction::triggered, this, &MainWindow::export_3dm);
+
+    auto* export_dxf_a = file_menu->addAction("Export &DXF...");
     connect(export_dxf_a, &QAction::triggered, this, &MainWindow::export_dxf);
+
+#ifndef CADINO_HAS_OPENNURBS
+    import_3dm_a->setEnabled(false);
+    export_3dm_a->setEnabled(false);
+    import_3dm_a->setToolTip("Built without openNURBS support");
+    export_3dm_a->setToolTip("Built without openNURBS support");
+#endif
 
     file_menu->addSeparator();
     file_menu->addAction("E&xit", this, &QWidget::close);
@@ -477,6 +494,51 @@ void MainWindow::export_dxf() {
         return;
     }
     statusBar()->showMessage(QString("Exported DXF to %1").arg(path));
+}
+
+void MainWindow::import_3dm() {
+#ifdef CADINO_HAS_OPENNURBS
+    const QString path = QFileDialog::getOpenFileName(
+        this, "Import Rhino 3DM", current_file_path_,
+        "Rhino 3DM (*.3dm);;All files (*)");
+    if (path.isEmpty()) return;
+
+    std::string error;
+    if (!cadino::io::import_3dm(document_, path.toStdString(), &error)) {
+        QMessageBox::warning(this, "Import failed",
+                             QString::fromStdString(error.empty() ? "Unknown error" : error));
+        return;
+    }
+    stack_.clear();
+    plan_view_->clear_selection();
+    plan_view_->update();
+    viewport_3d_->update();
+    update_undo_redo_actions();
+    statusBar()->showMessage(QString("Imported %1").arg(path));
+#else
+    QMessageBox::information(this, "openNURBS disabled",
+                             "Cadino was built without openNURBS support.");
+#endif
+}
+
+void MainWindow::export_3dm() {
+#ifdef CADINO_HAS_OPENNURBS
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export Rhino 3DM", current_file_path_, "Rhino 3DM (*.3dm)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".3dm", Qt::CaseInsensitive)) path += ".3dm";
+
+    std::string error;
+    if (!cadino::io::export_3dm(document_, path.toStdString(), &error)) {
+        QMessageBox::warning(this, "Export failed",
+                             QString::fromStdString(error.empty() ? "Unknown error" : error));
+        return;
+    }
+    statusBar()->showMessage(QString("Exported 3DM to %1").arg(path));
+#else
+    QMessageBox::information(this, "openNURBS disabled",
+                             "Cadino was built without openNURBS support.");
+#endif
 }
 
 bool MainWindow::save_document_as() {
