@@ -20,9 +20,11 @@
 #include "BoxTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
+#include "DoorTool.hpp"
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
+#include "SlabTool.hpp"
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
 #include <QKeySequence>
@@ -196,6 +198,24 @@ void MainWindow::build_toolbar() {
     group->addAction(cylinder_action_);
     connect(cylinder_action_, &QAction::triggered, this, &MainWindow::activate_cylinder_tool);
 
+    door_action_ = tools->addAction("Door");
+    door_action_->setCheckable(true);
+    door_action_->setShortcut(QKeySequence("D"));
+    group->addAction(door_action_);
+    connect(door_action_, &QAction::triggered, this, &MainWindow::activate_door_tool);
+
+    window_action_ = tools->addAction("Window");
+    window_action_->setCheckable(true);
+    window_action_->setShortcut(QKeySequence("N"));
+    group->addAction(window_action_);
+    connect(window_action_, &QAction::triggered, this, &MainWindow::activate_window_tool);
+
+    slab_action_ = tools->addAction("Slab");
+    slab_action_->setCheckable(true);
+    slab_action_->setShortcut(QKeySequence("L"));
+    group->addAction(slab_action_);
+    connect(slab_action_, &QAction::triggered, this, &MainWindow::activate_slab_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -247,6 +267,24 @@ void MainWindow::activate_cylinder_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::CylinderTool>());
     if (cylinder_action_) cylinder_action_->setChecked(true);
     statusBar()->showMessage("Cylinder tool — click center then radius (default height 750mm). Esc to cancel.");
+}
+
+void MainWindow::activate_door_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::DoorTool>(false));
+    if (door_action_) door_action_->setChecked(true);
+    statusBar()->showMessage("Door tool — click on a wall to place a door");
+}
+
+void MainWindow::activate_window_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::DoorTool>(true));
+    if (window_action_) window_action_->setChecked(true);
+    statusBar()->showMessage("Window tool — click on a wall to place a window");
+}
+
+void MainWindow::activate_slab_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::SlabTool>());
+    if (slab_action_) slab_action_->setChecked(true);
+    statusBar()->showMessage("Slab tool — click two opposite corners to create a floor slab");
 }
 
 void MainWindow::set_view_mode(ViewMode mode) {

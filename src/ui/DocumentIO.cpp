@@ -102,6 +102,74 @@ cadino::core::Box box_from(const QJsonObject& o) {
     return b;
 }
 
+QJsonObject to_json(const cadino::core::Door& d) {
+    QJsonObject o;
+    o["id"] = qint64(d.id.value);
+    o["host_wall"] = qint64(d.host_wall.value);
+    o["position_along"] = d.position_along;
+    o["width"] = d.width;
+    o["height"] = d.height;
+    o["sill_height"] = d.sill_height;
+    return o;
+}
+
+QJsonObject to_json(const cadino::core::Window& w) {
+    QJsonObject o;
+    o["id"] = qint64(w.id.value);
+    o["host_wall"] = qint64(w.host_wall.value);
+    o["position_along"] = w.position_along;
+    o["width"] = w.width;
+    o["height"] = w.height;
+    o["sill_height"] = w.sill_height;
+    return o;
+}
+
+QJsonObject to_json(const cadino::core::Slab& s) {
+    QJsonObject o;
+    o["id"] = qint64(s.id.value);
+    QJsonArray outline;
+    for (const auto& v : s.outline) outline.append(vec2_array(v.x(), v.y()));
+    o["outline"] = outline;
+    o["level"] = s.level;
+    o["thickness"] = s.thickness;
+    return o;
+}
+
+cadino::core::Door door_from(const QJsonObject& o) {
+    cadino::core::Door d;
+    d.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    d.host_wall = cadino::core::EntityId{static_cast<std::uint64_t>(o["host_wall"].toVariant().toULongLong())};
+    d.position_along = o["position_along"].toDouble(d.position_along);
+    d.width = o["width"].toDouble(d.width);
+    d.height = o["height"].toDouble(d.height);
+    d.sill_height = o["sill_height"].toDouble(d.sill_height);
+    return d;
+}
+
+cadino::core::Window window_from(const QJsonObject& o) {
+    cadino::core::Window w;
+    w.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    w.host_wall = cadino::core::EntityId{static_cast<std::uint64_t>(o["host_wall"].toVariant().toULongLong())};
+    w.position_along = o["position_along"].toDouble(w.position_along);
+    w.width = o["width"].toDouble(w.width);
+    w.height = o["height"].toDouble(w.height);
+    w.sill_height = o["sill_height"].toDouble(w.sill_height);
+    return w;
+}
+
+cadino::core::Slab slab_from(const QJsonObject& o) {
+    cadino::core::Slab s;
+    s.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    const auto outline = o["outline"].toArray();
+    for (const auto& v : outline) {
+        const auto pt = v.toArray();
+        if (pt.size() >= 2) s.outline.emplace_back(pt[0].toDouble(), pt[1].toDouble());
+    }
+    s.level = o["level"].toDouble(s.level);
+    s.thickness = o["thickness"].toDouble(s.thickness);
+    return s;
+}
+
 cadino::core::Cylinder cylinder_from(const QJsonObject& o) {
     cadino::core::Cylinder c;
     c.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
@@ -134,6 +202,18 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     QJsonArray cyls_json;
     for (const auto& [id, c] : doc.cylinders()) cyls_json.append(to_json(c));
     root["cylinders"] = cyls_json;
+
+    QJsonArray doors_json;
+    for (const auto& [id, d] : doc.doors()) doors_json.append(to_json(d));
+    root["doors"] = doors_json;
+
+    QJsonArray windows_json;
+    for (const auto& [id, w] : doc.windows()) windows_json.append(to_json(w));
+    root["windows"] = windows_json;
+
+    QJsonArray slabs_json;
+    for (const auto& [id, s] : doc.slabs()) slabs_json.append(to_json(s));
+    root["slabs"] = slabs_json;
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -183,6 +263,21 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto c = cylinder_from(v.toObject());
         max_id = std::max(max_id, c.id.value);
         loaded.add_cylinder(std::move(c));
+    }
+    for (const auto& v : root["doors"].toArray()) {
+        auto d = door_from(v.toObject());
+        max_id = std::max(max_id, d.id.value);
+        loaded.add_door(std::move(d));
+    }
+    for (const auto& v : root["windows"].toArray()) {
+        auto w = window_from(v.toObject());
+        max_id = std::max(max_id, w.id.value);
+        loaded.add_window(std::move(w));
+    }
+    for (const auto& v : root["slabs"].toArray()) {
+        auto s = slab_from(v.toObject());
+        max_id = std::max(max_id, s.id.value);
+        loaded.add_slab(std::move(s));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

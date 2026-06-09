@@ -111,13 +111,84 @@ void PlanView::paintEvent(QPaintEvent*) {
     p.fillRect(rect(), QColor(248, 248, 248));
     p.setRenderHint(QPainter::Antialiasing);
     draw_grid(p);
+    draw_slabs(p);
     draw_boxes(p);
     draw_cylinders(p);
     draw_walls(p);
+    draw_doors_windows(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
     draw_snap_marker(p);
+}
+
+void PlanView::draw_slabs(QPainter& p) {
+    QPen pen(QColor(120, 90, 60), 1, Qt::DotLine);
+    pen.setCosmetic(true);
+    p.setPen(pen);
+    p.setBrush(QColor(190, 165, 130, 50));
+
+    for (const auto& [id, s] : document_.slabs()) {
+        if (s.outline.size() < 3) continue;
+        QPolygonF poly;
+        for (const auto& v : s.outline) {
+            poly << model_to_screen({v.x(), v.y()});
+        }
+        p.drawPolygon(poly);
+    }
+}
+
+void PlanView::draw_doors_windows(QPainter& p) {
+    for (const auto& [id, d] : document_.doors()) {
+        const auto* w = document_.find_wall(d.host_wall);
+        if (!w) continue;
+        const QPointF a{w->start.x(), w->start.y()};
+        const QPointF b{w->end.x(), w->end.y()};
+        const double len = std::hypot(b.x() - a.x(), b.y() - a.y());
+        if (len < 1e-6) continue;
+        const QPointF unit{(b.x() - a.x()) / len, (b.y() - a.y()) / len};
+        const QPointF normal{-unit.y(), unit.x()};
+        const QPointF center = a + unit * d.position_along;
+        const QPointF p1 = center - unit * (d.width * 0.5);
+        const QPointF p2 = center + unit * (d.width * 0.5);
+        const QPointF hinge = p1;
+        const QPointF swing_end = hinge + normal * d.width;
+
+        QPen pen(QColor(220, 130, 60), 2);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.setBrush(Qt::white);
+        p.drawLine(model_to_screen(p1), model_to_screen(p2));
+        QPen arc_pen(QColor(220, 130, 60, 180), 1, Qt::DashLine);
+        arc_pen.setCosmetic(true);
+        p.setPen(arc_pen);
+        const QPointF hinge_s = model_to_screen(hinge);
+        const QPointF tip_s = model_to_screen(swing_end);
+        const double r_s = std::hypot(tip_s.x() - hinge_s.x(), tip_s.y() - hinge_s.y());
+        p.drawArc(QRectF(hinge_s.x() - r_s, hinge_s.y() - r_s, 2 * r_s, 2 * r_s),
+                  0, 90 * 16);
+    }
+
+    for (const auto& [id, win] : document_.windows()) {
+        const auto* w = document_.find_wall(win.host_wall);
+        if (!w) continue;
+        const QPointF a{w->start.x(), w->start.y()};
+        const QPointF b{w->end.x(), w->end.y()};
+        const double len = std::hypot(b.x() - a.x(), b.y() - a.y());
+        if (len < 1e-6) continue;
+        const QPointF unit{(b.x() - a.x()) / len, (b.y() - a.y()) / len};
+        const QPointF normal{-unit.y(), unit.x()};
+        const QPointF center = a + unit * win.position_along;
+        const QPointF p1 = center - unit * (win.width * 0.5);
+        const QPointF p2 = center + unit * (win.width * 0.5);
+        const QPointF off = normal * (w->thickness * 0.5);
+        QPen pen(QColor(80, 150, 200), 2);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.drawLine(model_to_screen(p1 + off), model_to_screen(p2 + off));
+        p.drawLine(model_to_screen(p1 - off), model_to_screen(p2 - off));
+        p.drawLine(model_to_screen(p1), model_to_screen(p2));
+    }
 }
 
 void PlanView::draw_cylinders(QPainter& p) {

@@ -5,6 +5,7 @@ add_library(cadino_core STATIC
     command/WallCommands.cpp
     command/BoxCommands.cpp
     command/CylinderCommands.cpp
+    command/DoorWindowSlabCommands.cpp
 )
 
 target_include_directories(cadino_core

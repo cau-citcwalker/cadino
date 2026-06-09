@@ -264,6 +264,65 @@ void Viewport3D::rebuild_mesh() {
                       static_cast<float>(c.base_z + c.height),
                       QVector3D(c.color.r, c.color.g, c.color.b));
     }
+    for (const auto& [id, s] : document_.slabs()) {
+        if (s.outline.size() < 3) continue;
+        double minx = s.outline[0].x(), miny = s.outline[0].y();
+        double maxx = minx, maxy = miny;
+        for (const auto& v : s.outline) {
+            minx = std::min(minx, v.x()); miny = std::min(miny, v.y());
+            maxx = std::max(maxx, v.x()); maxy = std::max(maxy, v.y());
+        }
+        const QVector3D center((minx + maxx) * 0.5f, (miny + maxy) * 0.5f, 0.0f);
+        push_oriented_box(verts, center,
+                          static_cast<float>((maxx - minx) * 0.5),
+                          static_cast<float>((maxy - miny) * 0.5),
+                          static_cast<float>(s.level),
+                          static_cast<float>(s.level + s.thickness),
+                          0.0f,
+                          QVector3D(0.72f, 0.65f, 0.55f));
+    }
+    for (const auto& [id, d] : document_.doors()) {
+        const auto* w = document_.find_wall(d.host_wall);
+        if (!w) continue;
+        const QVector3D a(static_cast<float>(w->start.x()),
+                          static_cast<float>(w->start.y()), 0.0f);
+        const QVector3D b(static_cast<float>(w->end.x()),
+                          static_cast<float>(w->end.y()), 0.0f);
+        const QVector3D dir = b - a;
+        const float len = dir.length();
+        if (len < 1e-5f) continue;
+        const QVector3D unit = dir / len;
+        const float yaw = std::atan2(unit.y(), unit.x());
+        const QVector3D center = a + unit * static_cast<float>(d.position_along);
+        push_oriented_box(verts, center,
+                          static_cast<float>(d.width * 0.5),
+                          static_cast<float>(w->thickness * 0.5),
+                          static_cast<float>(d.sill_height),
+                          static_cast<float>(d.sill_height + d.height),
+                          yaw,
+                          QVector3D(0.55f, 0.35f, 0.20f));
+    }
+    for (const auto& [id, win] : document_.windows()) {
+        const auto* w = document_.find_wall(win.host_wall);
+        if (!w) continue;
+        const QVector3D a(static_cast<float>(w->start.x()),
+                          static_cast<float>(w->start.y()), 0.0f);
+        const QVector3D b(static_cast<float>(w->end.x()),
+                          static_cast<float>(w->end.y()), 0.0f);
+        const QVector3D dir = b - a;
+        const float len = dir.length();
+        if (len < 1e-5f) continue;
+        const QVector3D unit = dir / len;
+        const float yaw = std::atan2(unit.y(), unit.x());
+        const QVector3D center = a + unit * static_cast<float>(win.position_along);
+        push_oriented_box(verts, center,
+                          static_cast<float>(win.width * 0.5),
+                          static_cast<float>(w->thickness * 0.5 + 1.0),
+                          static_cast<float>(win.sill_height),
+                          static_cast<float>(win.sill_height + win.height),
+                          yaw,
+                          QVector3D(0.65f, 0.80f, 0.90f));
+    }
     walls_vertex_end_ = static_cast<int>(walls_end);
 
     vao_.bind();

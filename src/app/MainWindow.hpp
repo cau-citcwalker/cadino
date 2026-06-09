@@ -40,6 +40,9 @@ private:
     void activate_wall_tool();
     void activate_box_tool();
     void activate_cylinder_tool();
+    void activate_door_tool();
+    void activate_window_tool();
+    void activate_slab_tool();
     void delete_selected();
     void group_selected();
     void ungroup_selected();
@@ -65,6 +68,9 @@ private:
     QAction* wall_action_{nullptr};
     QAction* box_action_{nullptr};
     QAction* cylinder_action_{nullptr};
+    QAction* door_action_{nullptr};
+    QAction* window_action_{nullptr};
+    QAction* slab_action_{nullptr};
     QAction* mode_plan_action_{nullptr};
     QAction* mode_viewport_action_{nullptr};
     QAction* mode_split_action_{nullptr};
