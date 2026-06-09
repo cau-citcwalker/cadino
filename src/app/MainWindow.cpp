@@ -25,6 +25,7 @@
 #include "SelectTool.hpp"
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
+#include <QKeySequence>
 
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
@@ -66,11 +67,10 @@ void MainWindow::build_central_widget() {
     splitter_->setChildrenCollapsible(false);
 
     plan_view_ = new cadino::ui::PlanView(document_, stack_, splitter_);
-    auto* viewport = new cadino::ui::Viewport3D(document_, splitter_);
-    viewport_3d_ = viewport;
+    viewport_3d_ = new cadino::ui::Viewport3D(document_, splitter_);
 
-    connect(plan_view_, &cadino::ui::PlanView::document_modified, this, [this, viewport] {
-        viewport->refresh();
+    connect(plan_view_, &cadino::ui::PlanView::document_modified, this, [this] {
+        viewport_3d_->refresh();
         update_undo_redo_actions();
     });
 
@@ -202,6 +202,24 @@ void MainWindow::build_toolbar() {
     view_bar->addAction(mode_plan_action_);
     view_bar->addAction(mode_viewport_action_);
     view_bar->addAction(mode_split_action_);
+
+    auto* cam_bar = addToolBar("Camera");
+    cam_bar->setMovable(false);
+    auto add_preset = [&](const QString& label, cadino::ui::Viewport3D::CameraPreset p,
+                          const QKeySequence& key = {}) {
+        auto* act = cam_bar->addAction(label);
+        if (!key.isEmpty()) act->setShortcut(key);
+        connect(act, &QAction::triggered, this, [this, p, label] {
+            viewport_3d_->set_preset(p);
+            statusBar()->showMessage(QString("Camera: %1").arg(label));
+        });
+    };
+    add_preset("Iso", cadino::ui::Viewport3D::CameraPreset::Iso, QKeySequence("1"));
+    add_preset("Top", cadino::ui::Viewport3D::CameraPreset::Top, QKeySequence("2"));
+    add_preset("Front", cadino::ui::Viewport3D::CameraPreset::Front, QKeySequence("3"));
+    add_preset("Back", cadino::ui::Viewport3D::CameraPreset::Back, QKeySequence("4"));
+    add_preset("Left", cadino::ui::Viewport3D::CameraPreset::Left, QKeySequence("5"));
+    add_preset("Right", cadino::ui::Viewport3D::CameraPreset::Right, QKeySequence("6"));
 }
 
 void MainWindow::activate_select_tool() {

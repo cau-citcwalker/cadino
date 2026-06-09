@@ -21,10 +21,14 @@ class Viewport3D : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core {
     Q_OBJECT
 
 public:
+    enum class CameraPreset { Iso, Top, Front, Back, Left, Right };
+
     explicit Viewport3D(cadino::core::Document& doc, QWidget* parent = nullptr);
     ~Viewport3D() override;
 
     void refresh() { update(); }
+    void set_preset(CameraPreset preset);
+    [[nodiscard]] CameraPreset preset() const noexcept { return preset_; }
 
 protected:
     void initializeGL() override;
@@ -55,6 +59,7 @@ private:
     float camera_yaw_{-45.0f};
     float camera_pitch_{30.0f};
     float camera_distance_{8000.0f};
+    CameraPreset preset_{CameraPreset::Iso};
 
     Qt::MouseButton drag_button_{Qt::NoButton};
     QPointF drag_last_;

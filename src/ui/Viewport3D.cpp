@@ -291,8 +291,32 @@ QMatrix4x4 Viewport3D::view_matrix() const {
 QMatrix4x4 Viewport3D::projection_matrix() const {
     QMatrix4x4 p;
     const float aspect = height() > 0 ? static_cast<float>(width()) / height() : 1.0f;
-    p.perspective(50.0f, aspect, 100.0f, 200000.0f);
+    if (preset_ == CameraPreset::Iso) {
+        p.perspective(50.0f, aspect, 100.0f, 200000.0f);
+    } else {
+        const float h = camera_distance_ * 0.5f;
+        p.ortho(-h * aspect, h * aspect, -h, h, -200000.0f, 200000.0f);
+    }
     return p;
+}
+
+void Viewport3D::set_preset(CameraPreset preset) {
+    preset_ = preset;
+    switch (preset) {
+        case CameraPreset::Iso:
+            camera_yaw_ = -45.0f; camera_pitch_ = 30.0f; break;
+        case CameraPreset::Top:
+            camera_yaw_ = 0.0f; camera_pitch_ = 89.9f; break;
+        case CameraPreset::Front:
+            camera_yaw_ = -90.0f; camera_pitch_ = 0.0f; break;
+        case CameraPreset::Back:
+            camera_yaw_ = 90.0f; camera_pitch_ = 0.0f; break;
+        case CameraPreset::Left:
+            camera_yaw_ = 180.0f; camera_pitch_ = 0.0f; break;
+        case CameraPreset::Right:
+            camera_yaw_ = 0.0f; camera_pitch_ = 0.0f; break;
+    }
+    update();
 }
 
 void Viewport3D::paintGL() {
@@ -353,7 +377,7 @@ void Viewport3D::mouseMoveEvent(QMouseEvent* event) {
     const QPointF delta = event->position() - drag_last_;
     drag_last_ = event->position();
 
-    if (drag_button_ == Qt::LeftButton) {
+    if (drag_button_ == Qt::LeftButton && preset_ == CameraPreset::Iso) {
         camera_yaw_ -= static_cast<float>(delta.x()) * 0.4f;
         camera_pitch_ = std::clamp(camera_pitch_ + static_cast<float>(delta.y()) * 0.4f,
                                     -85.0f, 85.0f);
