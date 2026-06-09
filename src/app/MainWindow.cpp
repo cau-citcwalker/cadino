@@ -96,20 +96,28 @@ void MainWindow::build_central_widget() {
     });
     connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, refresh_all_3d);
 
+    plan_view_->setMinimumSize(200, 150);
+    viewport_3d_->setMinimumSize(200, 150);
+    front_view_->setMinimumSize(200, 150);
+    side_view_->setMinimumSize(200, 150);
+
     top_row_->addWidget(plan_view_);
     top_row_->addWidget(viewport_3d_);
     top_row_->setStretchFactor(0, 1);
     top_row_->setStretchFactor(1, 1);
+    top_row_->setSizes({600, 600});
 
     bottom_row_->addWidget(front_view_);
     bottom_row_->addWidget(side_view_);
     bottom_row_->setStretchFactor(0, 1);
     bottom_row_->setStretchFactor(1, 1);
+    bottom_row_->setSizes({600, 600});
 
     splitter_->addWidget(top_row_);
     splitter_->addWidget(bottom_row_);
     splitter_->setStretchFactor(0, 1);
     splitter_->setStretchFactor(1, 1);
+    splitter_->setSizes({400, 400});
 
     setCentralWidget(splitter_);
 }
@@ -388,6 +396,15 @@ void MainWindow::set_view_mode(ViewMode mode) {
 
     top_row_->setVisible(plan_view_->isVisible() || viewport_3d_->isVisible());
     bottom_row_->setVisible(front_view_->isVisible() || side_view_->isVisible());
+
+    if (mode == ViewMode::Quad) {
+        splitter_->setSizes({400, 400});
+        top_row_->setSizes({600, 600});
+        bottom_row_->setSizes({600, 600});
+    } else if (mode == ViewMode::Split) {
+        splitter_->setSizes({800, 0});
+        top_row_->setSizes({600, 600});
+    }
 }
 
 void MainWindow::update_undo_redo_actions() {
