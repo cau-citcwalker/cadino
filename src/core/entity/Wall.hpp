@@ -9,6 +9,7 @@ namespace cadino::core {
 
 struct Wall {
     EntityId id{};
+    EntityId group_id{};
     Eigen::Vector2d start{0.0, 0.0};
     Eigen::Vector2d end{0.0, 0.0};
     double height{2400.0};

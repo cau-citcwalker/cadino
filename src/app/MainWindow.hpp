@@ -40,6 +40,8 @@ private:
     void activate_box_tool();
     void activate_cylinder_tool();
     void delete_selected();
+    void group_selected();
+    void ungroup_selected();
     void new_document();
     void open_document();
     bool save_document();

@@ -39,6 +39,7 @@ cadino::core::Color color_from(const QJsonArray& a) {
 QJsonObject to_json(const cadino::core::Wall& w) {
     QJsonObject o;
     o["id"] = qint64(w.id.value);
+    o["group_id"] = qint64(w.group_id.value);
     o["start"] = vec2_array(w.start.x(), w.start.y());
     o["end"] = vec2_array(w.end.x(), w.end.y());
     o["height"] = w.height;
@@ -50,6 +51,7 @@ QJsonObject to_json(const cadino::core::Wall& w) {
 QJsonObject to_json(const cadino::core::Box& b) {
     QJsonObject o;
     o["id"] = qint64(b.id.value);
+    o["group_id"] = qint64(b.group_id.value);
     o["position"] = vec2_array(b.position.x(), b.position.y());
     o["size_xy"] = vec2_array(b.size_xy.x(), b.size_xy.y());
     o["height"] = b.height;
@@ -62,6 +64,7 @@ QJsonObject to_json(const cadino::core::Box& b) {
 QJsonObject to_json(const cadino::core::Cylinder& c) {
     QJsonObject o;
     o["id"] = qint64(c.id.value);
+    o["group_id"] = qint64(c.group_id.value);
     o["position"] = vec2_array(c.position.x(), c.position.y());
     o["radius"] = c.radius;
     o["height"] = c.height;
@@ -73,6 +76,7 @@ QJsonObject to_json(const cadino::core::Cylinder& c) {
 cadino::core::Wall wall_from(const QJsonObject& o) {
     cadino::core::Wall w;
     w.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    w.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
     const auto s = o["start"].toArray();
     const auto e = o["end"].toArray();
     if (s.size() >= 2) w.start = {s[0].toDouble(), s[1].toDouble()};
@@ -86,6 +90,7 @@ cadino::core::Wall wall_from(const QJsonObject& o) {
 cadino::core::Box box_from(const QJsonObject& o) {
     cadino::core::Box b;
     b.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    b.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
     const auto p = o["position"].toArray();
     const auto sz = o["size_xy"].toArray();
     if (p.size() >= 2) b.position = {p[0].toDouble(), p[1].toDouble()};
@@ -100,6 +105,7 @@ cadino::core::Box box_from(const QJsonObject& o) {
 cadino::core::Cylinder cylinder_from(const QJsonObject& o) {
     cadino::core::Cylinder c;
     c.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    c.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
     const auto p = o["position"].toArray();
     if (p.size() >= 2) c.position = {p[0].toDouble(), p[1].toDouble()};
     c.radius = o["radius"].toDouble(c.radius);

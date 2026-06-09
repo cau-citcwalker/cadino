@@ -127,6 +127,15 @@ void MainWindow::build_menu() {
     delete_action_->setShortcuts({QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
     connect(delete_action_, &QAction::triggered, this, &MainWindow::delete_selected);
 
+    edit_menu->addSeparator();
+    auto* group_a = edit_menu->addAction("&Group");
+    group_a->setShortcut(QKeySequence("Ctrl+G"));
+    connect(group_a, &QAction::triggered, this, &MainWindow::group_selected);
+
+    auto* ungroup_a = edit_menu->addAction("Un&group");
+    ungroup_a->setShortcut(QKeySequence("Ctrl+Shift+G"));
+    connect(ungroup_a, &QAction::triggered, this, &MainWindow::ungroup_selected);
+
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (2D)");
     mode_plan_action_->setCheckable(true);
@@ -313,6 +322,42 @@ bool MainWindow::save_document_as() {
     setWindowTitle(QString("Cadino — %1").arg(QFileInfo(path).fileName()));
     statusBar()->showMessage(QString("Saved %1").arg(path));
     return true;
+}
+
+void MainWindow::group_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.size() < 2) {
+        statusBar()->showMessage("Select at least 2 entities to group");
+        return;
+    }
+    const auto new_group = cadino::core::next_entity_id();
+    for (const auto& sel : selections) {
+        if (sel.kind == cadino::ui::SelectKind::Wall) {
+            if (auto* w = document_.find_wall(sel.id)) w->group_id = new_group;
+        } else if (sel.kind == cadino::ui::SelectKind::Box) {
+            if (auto* b = document_.find_box(sel.id)) b->group_id = new_group;
+        } else if (sel.kind == cadino::ui::SelectKind::Cylinder) {
+            if (auto* c = document_.find_cylinder(sel.id)) c->group_id = new_group;
+        }
+    }
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Grouped %1 entities").arg(selections.size()));
+}
+
+void MainWindow::ungroup_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.empty()) return;
+    for (const auto& sel : selections) {
+        if (sel.kind == cadino::ui::SelectKind::Wall) {
+            if (auto* w = document_.find_wall(sel.id)) w->group_id = {};
+        } else if (sel.kind == cadino::ui::SelectKind::Box) {
+            if (auto* b = document_.find_box(sel.id)) b->group_id = {};
+        } else if (sel.kind == cadino::ui::SelectKind::Cylinder) {
+            if (auto* c = document_.find_cylinder(sel.id)) c->group_id = {};
+        }
+    }
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage("Ungrouped selection");
 }
 
 void MainWindow::delete_selected() {

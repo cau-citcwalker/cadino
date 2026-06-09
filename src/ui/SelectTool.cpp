@@ -44,6 +44,34 @@ bool point_in_box_footprint(QPointF p, const cadino::core::Box& b) {
     return std::abs(lx) <= hx && std::abs(ly) <= hy;
 }
 
+cadino::core::EntityId group_of(const cadino::core::Document& doc, Selection sel) {
+    if (sel.kind == SelectKind::Wall) {
+        if (const auto* w = doc.find_wall(sel.id)) return w->group_id;
+    } else if (sel.kind == SelectKind::Box) {
+        if (const auto* b = doc.find_box(sel.id)) return b->group_id;
+    } else if (sel.kind == SelectKind::Cylinder) {
+        if (const auto* c = doc.find_cylinder(sel.id)) return c->group_id;
+    }
+    return {};
+}
+
+std::vector<Selection> expand_to_group(const cadino::core::Document& doc, Selection sel) {
+    const auto gid = group_of(doc, sel);
+    if (!gid.valid()) return {sel};
+
+    std::vector<Selection> result;
+    for (const auto& [id, w] : doc.walls()) {
+        if (w.group_id == gid) result.push_back({id, SelectKind::Wall});
+    }
+    for (const auto& [id, b] : doc.boxes()) {
+        if (b.group_id == gid) result.push_back({id, SelectKind::Box});
+    }
+    for (const auto& [id, c] : doc.cylinders()) {
+        if (c.group_id == gid) result.push_back({id, SelectKind::Cylinder});
+    }
+    return result.empty() ? std::vector<Selection>{sel} : result;
+}
+
 Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double pick_radius) {
     Selection best{};
     double best_dist = std::numeric_limits<double>::infinity();
@@ -107,13 +135,19 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
         return;
     }
 
+    const auto group_members = expand_to_group(doc, hit);
+
     if (shift) {
-        view.toggle_selection(hit);
+        if (view.is_selected(hit)) {
+            for (const auto& m : group_members) view.remove_from_selection(m);
+        } else {
+            for (const auto& m : group_members) view.add_to_selection(m);
+        }
         return;
     }
 
     if (!view.is_selected(hit)) {
-        view.set_selections({hit});
+        view.set_selections(group_members);
     }
 
     drag_originals_.clear();
@@ -193,6 +227,15 @@ void SelectTool::on_release(PlanView& view, QPointF model_pos, Qt::MouseButton b
         for (const auto& [id, c] : doc.cylinders()) {
             if (cylinder_in_rect(c, rect)) hits.push_back({id, SelectKind::Cylinder});
         }
+        std::vector<Selection> expanded;
+        for (const auto& h : hits) {
+            for (const auto& m : expand_to_group(doc, h)) {
+                if (std::find(expanded.begin(), expanded.end(), m) == expanded.end()) {
+                    expanded.push_back(m);
+                }
+            }
+        }
+        hits = std::move(expanded);
         const bool shift = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
         if (shift) {
             for (const auto& h : hits) view.add_to_selection(h);
