@@ -23,14 +23,16 @@ layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec3 a_color;
 
 uniform mat4 u_view_proj;
+uniform mat4 u_model;
 
 out vec3 v_normal;
 out vec3 v_color;
 
 void main() {
+    vec4 wp = u_model * vec4(a_pos, 1.0);
     v_normal = a_normal;
     v_color = a_color;
-    gl_Position = u_view_proj * vec4(a_pos, 1.0);
+    gl_Position = u_view_proj * wp;
 }
 )";
 
@@ -41,8 +43,13 @@ in vec3 v_color;
 out vec4 frag_color;
 
 uniform vec3 u_light_dir;
+uniform int u_shadow_mode;
 
 void main() {
+    if (u_shadow_mode == 1) {
+        frag_color = vec4(0.02, 0.02, 0.04, 0.35);
+        return;
+    }
     vec3 N = normalize(v_normal);
     if (!gl_FrontFacing) N = -N;
     float diff = max(dot(N, -normalize(u_light_dir)), 0.0);
@@ -299,7 +306,34 @@ void Viewport3D::paintGL() {
     program_->setUniformValue("u_view_proj", vp);
     program_->setUniformValue("u_light_dir", QVector3D(-0.4f, -0.3f, -1.0f));
 
+    QMatrix4x4 identity;
+    program_->setUniformValue("u_model", identity);
+    program_->setUniformValue("u_shadow_mode", 0);
     glDrawArrays(GL_TRIANGLES, 0, vertex_count_);
+
+    if (vertex_count_ > 6) {
+        const QVector3D L(-0.4f, -0.3f, -1.0f);
+        const float lz = L.z();
+        QMatrix4x4 shadow(
+            1.0f, 0.0f, -L.x() / lz, 0.0f,
+            0.0f, 1.0f, -L.y() / lz, 0.0f,
+            0.0f, 0.0f,  0.0f,       1.0f,
+            0.0f, 0.0f,  0.0f,       1.0f);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glPolygonOffset(-1.0f, -1.0f);
+        glEnable(GL_POLYGON_OFFSET_FILL);
+
+        program_->setUniformValue("u_model", shadow);
+        program_->setUniformValue("u_shadow_mode", 1);
+        glDrawArrays(GL_TRIANGLES, 6, vertex_count_ - 6);
+
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
 
     vao_.release();
     program_->release();
