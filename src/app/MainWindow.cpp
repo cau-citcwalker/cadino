@@ -67,11 +67,14 @@ void MainWindow::build_central_widget() {
     splitter_->setChildrenCollapsible(false);
 
     plan_view_ = new cadino::ui::PlanView(document_, stack_, splitter_);
-    viewport_3d_ = new cadino::ui::Viewport3D(document_, splitter_);
+    viewport_3d_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, splitter_);
 
     connect(plan_view_, &cadino::ui::PlanView::document_modified, this, [this] {
         viewport_3d_->refresh();
         update_undo_redo_actions();
+    });
+    connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, [this] {
+        viewport_3d_->refresh();
     });
 
     splitter_->addWidget(plan_view_);
