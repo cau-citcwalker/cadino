@@ -19,6 +19,7 @@ struct MeshGeometry {
     Color color{0.70f, 0.55f, 0.40f};
     float roughness{0.6f};
     float metallic{0.0f};
+    int pattern{0};
 };
 
 }  // namespace cadino::core

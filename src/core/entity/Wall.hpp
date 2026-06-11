@@ -17,6 +17,7 @@ struct Wall {
     Color color{0.78f, 0.78f, 0.80f};
     float roughness{0.85f};
     float metallic{0.0f};
+    int pattern{0};
 
     [[nodiscard]] double length() const noexcept;
     [[nodiscard]] Eigen::Vector2d direction() const noexcept;

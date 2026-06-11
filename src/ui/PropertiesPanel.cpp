@@ -1,6 +1,7 @@
 #include "PropertiesPanel.hpp"
 
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QLabel>
@@ -80,11 +81,26 @@ void PropertiesPanel::clear_form() {
     fields_.clear();
     roughness_field_ = nullptr;
     metallic_field_ = nullptr;
+    pattern_combo_ = nullptr;
     color_button_ = nullptr;
     while (form_->rowCount() > 0) {
         form_->removeRow(0);
     }
 }
+
+namespace {
+
+QComboBox* make_pattern_combo(QWidget* parent, int current) {
+    auto* combo = new QComboBox(parent);
+    combo->addItem("Solid");
+    combo->addItem("Checker (500 mm)");
+    combo->addItem("Stripes (100 mm)");
+    combo->addItem("Wood grain");
+    combo->setCurrentIndex(std::clamp(current, 0, 3));
+    return combo;
+}
+
+}  // namespace
 
 void PropertiesPanel::show_empty(const QString& message) {
     clear_form();
@@ -162,6 +178,7 @@ void PropertiesPanel::build_for_wall() {
     color_button_ = make_color_button(w->color.r, w->color.g, w->color.b);
     roughness_field_ = make_unit_field(w->roughness);
     metallic_field_ = make_unit_field(w->metallic);
+    pattern_combo_ = make_pattern_combo(this, w->pattern);
 
     form_->addRow("Start X", start_x);
     form_->addRow("Start Y", start_y);
@@ -172,6 +189,7 @@ void PropertiesPanel::build_for_wall() {
     form_->addRow("Color", color_button_);
     form_->addRow("Roughness", roughness_field_);
     form_->addRow("Metallic", metallic_field_);
+    form_->addRow("Pattern", pattern_combo_);
 
     fields_ = {start_x, start_y, end_x, end_y, height, thickness};
 
@@ -183,6 +201,8 @@ void PropertiesPanel::build_for_wall() {
             &PropertiesPanel::commit_wall_edit);
     connect(metallic_field_, &QDoubleSpinBox::editingFinished, this,
             &PropertiesPanel::commit_wall_edit);
+    connect(pattern_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { commit_wall_edit(); });
     suppress_commit_ = false;
 }
 
@@ -218,6 +238,7 @@ void PropertiesPanel::build_for_box() {
     color_button_ = make_color_button(b->color.r, b->color.g, b->color.b);
     roughness_field_ = make_unit_field(b->roughness);
     metallic_field_ = make_unit_field(b->metallic);
+    pattern_combo_ = make_pattern_combo(this, b->pattern);
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -229,6 +250,7 @@ void PropertiesPanel::build_for_box() {
     form_->addRow("Color", color_button_);
     form_->addRow("Roughness", roughness_field_);
     form_->addRow("Metallic", metallic_field_);
+    form_->addRow("Pattern", pattern_combo_);
 
     fields_ = {pos_x, pos_y, size_x, size_y, height, base_z, rotation};
 
@@ -240,6 +262,8 @@ void PropertiesPanel::build_for_box() {
             &PropertiesPanel::commit_box_edit);
     connect(metallic_field_, &QDoubleSpinBox::editingFinished, this,
             &PropertiesPanel::commit_box_edit);
+    connect(pattern_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { commit_box_edit(); });
     suppress_commit_ = false;
 }
 
@@ -266,6 +290,7 @@ void PropertiesPanel::build_for_cylinder() {
     color_button_ = make_color_button(c->color.r, c->color.g, c->color.b);
     roughness_field_ = make_unit_field(c->roughness);
     metallic_field_ = make_unit_field(c->metallic);
+    pattern_combo_ = make_pattern_combo(this, c->pattern);
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -275,6 +300,7 @@ void PropertiesPanel::build_for_cylinder() {
     form_->addRow("Color", color_button_);
     form_->addRow("Roughness", roughness_field_);
     form_->addRow("Metallic", metallic_field_);
+    form_->addRow("Pattern", pattern_combo_);
 
     fields_ = {pos_x, pos_y, radius, height, base_z};
 
@@ -286,6 +312,8 @@ void PropertiesPanel::build_for_cylinder() {
             &PropertiesPanel::commit_cylinder_edit);
     connect(metallic_field_, &QDoubleSpinBox::editingFinished, this,
             &PropertiesPanel::commit_cylinder_edit);
+    connect(pattern_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { commit_cylinder_edit(); });
     suppress_commit_ = false;
 }
 
@@ -303,11 +331,12 @@ void PropertiesPanel::commit_cylinder_edit() {
     after.color = current_color_;
     if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
     if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
+    if (pattern_combo_) after.pattern = pattern_combo_->currentIndex();
 
     if (after.position == c->position && after.radius == c->radius &&
         after.height == c->height && after.base_z == c->base_z &&
         after.color == c->color && after.roughness == c->roughness &&
-        after.metallic == c->metallic) {
+        after.metallic == c->metallic && after.pattern == c->pattern) {
         return;
     }
 
@@ -330,11 +359,12 @@ void PropertiesPanel::commit_wall_edit() {
     after.color = current_color_;
     if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
     if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
+    if (pattern_combo_) after.pattern = pattern_combo_->currentIndex();
 
     if (after.start == w->start && after.end == w->end &&
         after.height == w->height && after.thickness == w->thickness &&
         after.color == w->color && after.roughness == w->roughness &&
-        after.metallic == w->metallic) {
+        after.metallic == w->metallic && after.pattern == w->pattern) {
         return;
     }
 
@@ -358,11 +388,13 @@ void PropertiesPanel::commit_box_edit() {
     after.color = current_color_;
     if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
     if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
+    if (pattern_combo_) after.pattern = pattern_combo_->currentIndex();
 
     if (after.position == b->position && after.size_xy == b->size_xy &&
         after.height == b->height && after.base_z == b->base_z &&
         after.rotation_z == b->rotation_z && after.color == b->color &&
-        after.roughness == b->roughness && after.metallic == b->metallic) {
+        after.roughness == b->roughness && after.metallic == b->metallic &&
+        after.pattern == b->pattern) {
         return;
     }
 

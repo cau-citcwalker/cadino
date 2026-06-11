@@ -17,6 +17,7 @@ struct Cylinder {
     Color color{0.55f, 0.70f, 0.82f};
     float roughness{0.5f};
     float metallic{0.0f};
+    int pattern{0};
 };
 
 }  // namespace cadino::core

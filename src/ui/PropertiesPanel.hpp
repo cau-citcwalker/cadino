@@ -7,6 +7,7 @@
 #include "Selection.hpp"
 #include "entity/Color.hpp"
 
+class QComboBox;
 class QDoubleSpinBox;
 class QFormLayout;
 class QLabel;
@@ -59,6 +60,7 @@ private:
     std::vector<QDoubleSpinBox*> fields_;
     QDoubleSpinBox* roughness_field_{nullptr};
     QDoubleSpinBox* metallic_field_{nullptr};
+    QComboBox* pattern_combo_{nullptr};
     QPushButton* color_button_{nullptr};
     cadino::core::Color current_color_{};
     bool suppress_commit_{false};

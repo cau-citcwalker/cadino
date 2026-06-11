@@ -18,6 +18,7 @@ struct Box {
     Color color{0.78f, 0.62f, 0.40f};
     float roughness{0.6f};
     float metallic{0.0f};
+    int pattern{0};  // 0=solid 1=checker 2=stripes 3=wood
 };
 
 }  // namespace cadino::core

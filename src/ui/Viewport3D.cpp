@@ -29,6 +29,7 @@ layout(location = 0) in vec3 a_pos;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec3 a_color;
 layout(location = 3) in vec2 a_material;
+layout(location = 4) in vec3 a_uv_pattern;  // uv.xy + pattern_id encoded in z
 
 uniform mat4 u_view_proj;
 uniform mat4 u_model;
@@ -37,6 +38,8 @@ out vec3 v_normal;
 out vec3 v_color;
 out vec3 v_world;
 out vec2 v_material;
+out vec2 v_uv;
+flat out int v_pattern;
 
 void main() {
     vec4 wp = u_model * vec4(a_pos, 1.0);
@@ -44,6 +47,8 @@ void main() {
     v_color = a_color;
     v_world = wp.xyz;
     v_material = a_material;
+    v_uv = a_uv_pattern.xy;
+    v_pattern = int(a_uv_pattern.z + 0.5);
     gl_Position = u_view_proj * wp;
 }
 )";
@@ -54,6 +59,8 @@ in vec3 v_normal;
 in vec3 v_color;
 in vec3 v_world;
 in vec2 v_material;
+in vec2 v_uv;
+flat in int v_pattern;
 out vec4 frag_color;
 
 uniform vec3 u_light_dir;
@@ -61,6 +68,28 @@ uniform vec3 u_eye_pos;
 uniform int u_shadow_mode;
 
 const float PI = 3.14159265358979323846;
+
+vec3 apply_pattern(vec3 base, int pattern, vec2 uv) {
+    if (pattern == 1) {
+        // Checker — 500 mm cells.
+        vec2 cell = floor(uv / 500.0);
+        float dark = mod(cell.x + cell.y, 2.0);
+        return mix(base, base * 0.55, dark);
+    }
+    if (pattern == 2) {
+        // Stripes — 100 mm spacing along U.
+        float band = mod(floor(uv.x / 100.0), 2.0);
+        return mix(base, base * 0.70, band);
+    }
+    if (pattern == 3) {
+        // Wood grain — sine bands along U with secondary modulation.
+        float b1 = sin(uv.x * 0.02) * 0.5 + 0.5;
+        float b2 = sin(uv.y * 0.005 + uv.x * 0.005) * 0.5 + 0.5;
+        float t = mix(b1, b2, 0.35);
+        return mix(base * 0.65, base * 1.10, t);
+    }
+    return base;
+}
 
 vec3 fresnel_schlick(float cos_theta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
@@ -130,15 +159,17 @@ void main() {
     vec3 fill_color = vec3(0.55, 0.65, 0.75) * 0.6;
     vec3 sky_color = vec3(0.45, 0.55, 0.70) * 0.4;
 
+    vec3 albedo = apply_pattern(v_color, v_pattern, v_uv);
+
     vec3 Lo = vec3(0.0);
-    Lo += brdf_lobe(N, V, key_dir, key_color, v_color, roughness, metallic);
-    Lo += brdf_lobe(N, V, fill_dir, fill_color, v_color, roughness, metallic);
-    Lo += brdf_lobe(N, V, sky_dir, sky_color, v_color, roughness, metallic);
+    Lo += brdf_lobe(N, V, key_dir, key_color, albedo, roughness, metallic);
+    Lo += brdf_lobe(N, V, fill_dir, fill_color, albedo, roughness, metallic);
+    Lo += brdf_lobe(N, V, sky_dir, sky_color, albedo, roughness, metallic);
 
     // Ambient term tinted with hemisphere lighting
     float up = N.z * 0.5 + 0.5;
     vec3 ambient_color = mix(vec3(0.12, 0.10, 0.09), vec3(0.30, 0.34, 0.40), up);
-    vec3 ambient = v_color * ambient_color * (1.0 - metallic * 0.6);
+    vec3 ambient = albedo * ambient_color * (1.0 - metallic * 0.6);
 
     vec3 col = ambient + Lo;
     // Reinhard tone mapping + slight gamma compensation
@@ -153,27 +184,45 @@ struct Vertex {
     float nx, ny, nz;
     float cr, cg, cb;
     float rough, metal;
+    float u, v, pattern;
 };
 
-void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c,
-               QVector3D d, QVector3D n, QVector3D color, float rough, float metal) {
-    auto v = [&](QVector3D p) {
+void push_quad_uv(std::vector<Vertex>& verts,
+                  QVector3D a, QVector3D b, QVector3D c, QVector3D d,
+                  QVector3D n, QVector3D color, float rough, float metal,
+                  float ua, float va, float ub, float vb,
+                  float uc, float vc, float ud, float vd,
+                  float pattern) {
+    auto push = [&](QVector3D p, float uu, float vv) {
         verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
-                          color.x(), color.y(), color.z(), rough, metal});
+                         color.x(), color.y(), color.z(), rough, metal,
+                         uu, vv, pattern});
     };
-    v(a); v(b); v(c);
-    v(a); v(c); v(d);
+    push(a, ua, va); push(b, ub, vb); push(c, uc, vc);
+    push(a, ua, va); push(c, uc, vc); push(d, ud, vd);
+}
+
+void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c,
+               QVector3D d, QVector3D n, QVector3D color, float rough, float metal,
+               float pattern = 0.0f) {
+    // Planar mapping aligned to the quad in world units; tessellator passes
+    // matching coordinates via push_quad_uv when it needs face-specific UVs.
+    push_quad_uv(verts, a, b, c, d, n, color, rough, metal,
+                 a.x(), a.y(), b.x(), b.y(),
+                 c.x(), c.y(), d.x(), d.y(), pattern);
 }
 
 void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
                    float zmin, float zmax, QVector3D color, float rough, float metal,
-                   int segments = 32) {
+                   float pattern = 0.0f, int segments = 32) {
     const float pi = std::numbers::pi_v<float>;
-    const auto cv = [&](QVector3D p, QVector3D n) {
+    const auto cv = [&](QVector3D p, QVector3D n, float u, float v) {
         verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
-                         color.x(), color.y(), color.z(), rough, metal});
+                         color.x(), color.y(), color.z(), rough, metal,
+                         u, v, pattern});
     };
 
+    const float circumference = 2.0f * pi * radius;
     for (int i = 0; i < segments; ++i) {
         const float a0 = 2.0f * pi * i / segments;
         const float a1 = 2.0f * pi * (i + 1) / segments;
@@ -186,8 +235,14 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
         const QVector3D t1(center.x() + radius * c1, center.y() + radius * s1, zmax);
         const QVector3D n0(c0, s0, 0.0f);
         const QVector3D n1(c1, s1, 0.0f);
-        cv(b0, n0); cv(b1, n1); cv(t1, n1);
-        cv(b0, n0); cv(t1, n1); cv(t0, n0);
+        const float u0 = a0 / (2.0f * pi) * circumference;
+        const float u1 = a1 / (2.0f * pi) * circumference;
+        cv(b0, n0, u0, zmin);
+        cv(b1, n1, u1, zmin);
+        cv(t1, n1, u1, zmax);
+        cv(b0, n0, u0, zmin);
+        cv(t1, n1, u1, zmax);
+        cv(t0, n0, u0, zmax);
     }
 
     const QVector3D top_c(center.x(), center.y(), zmax);
@@ -197,23 +252,25 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
     for (int i = 0; i < segments; ++i) {
         const float a0 = 2.0f * pi * i / segments;
         const float a1 = 2.0f * pi * (i + 1) / segments;
-        const QVector3D pt0(center.x() + radius * std::cos(a0),
-                            center.y() + radius * std::sin(a0), zmax);
-        const QVector3D pt1(center.x() + radius * std::cos(a1),
-                            center.y() + radius * std::sin(a1), zmax);
-        cv(top_c, zp); cv(pt0, zp); cv(pt1, zp);
+        const float c0 = std::cos(a0), s0 = std::sin(a0);
+        const float c1 = std::cos(a1), s1 = std::sin(a1);
+        const QVector3D pt0(center.x() + radius * c0, center.y() + radius * s0, zmax);
+        const QVector3D pt1(center.x() + radius * c1, center.y() + radius * s1, zmax);
+        cv(top_c, zp, center.x(), center.y());
+        cv(pt0,   zp, pt0.x(),    pt0.y());
+        cv(pt1,   zp, pt1.x(),    pt1.y());
 
-        const QVector3D pb0(center.x() + radius * std::cos(a0),
-                            center.y() + radius * std::sin(a0), zmin);
-        const QVector3D pb1(center.x() + radius * std::cos(a1),
-                            center.y() + radius * std::sin(a1), zmin);
-        cv(bot_c, zn); cv(pb1, zn); cv(pb0, zn);
+        const QVector3D pb0(center.x() + radius * c0, center.y() + radius * s0, zmin);
+        const QVector3D pb1(center.x() + radius * c1, center.y() + radius * s1, zmin);
+        cv(bot_c, zn, center.x(), center.y());
+        cv(pb1,   zn, pb1.x(),    pb1.y());
+        cv(pb0,   zn, pb0.x(),    pb0.y());
     }
 }
 
 void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, float hy,
                        float zmin, float zmax, float yaw, QVector3D color,
-                       float rough, float metal) {
+                       float rough, float metal, float pattern = 0.0f) {
     const float c = std::cos(yaw);
     const float s = std::sin(yaw);
     const QVector3D xp(c, s, 0.0f);
@@ -229,12 +286,22 @@ void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, f
     const QVector3D t2(b2.x(), b2.y(), zmax);
     const QVector3D t3(b3.x(), b3.y(), zmax);
 
-    push_quad(verts, t0, t1, t2, t3, zp, color, rough, metal);
-    push_quad(verts, b3, b2, b1, b0, -zp, color, rough, metal);
-    push_quad(verts, b1, b2, t2, t1, xp, color, rough, metal);
-    push_quad(verts, b3, b0, t0, t3, -xp, color, rough, metal);
-    push_quad(verts, b2, b3, t3, t2, yp, color, rough, metal);
-    push_quad(verts, b0, b1, t1, t0, -yp, color, rough, metal);
+    // Per-face planar UV: top/bottom use the box's local XY (in mm), the four
+    // sides use (along-face arc length, height).
+    const float sx = hx * 2.0f, sy = hy * 2.0f, sz = zmax - zmin;
+    push_quad_uv(verts, t0, t1, t2, t3, zp, color, rough, metal,
+                 -hx, -hy,  hx, -hy,  hx,  hy, -hx,  hy, pattern);
+    push_quad_uv(verts, b3, b2, b1, b0, -zp, color, rough, metal,
+                 -hx,  hy,  hx,  hy,  hx, -hy, -hx, -hy, pattern);
+    push_quad_uv(verts, b1, b2, t2, t1, xp, color, rough, metal,
+                 0, zmin, sy, zmin, sy, zmax, 0, zmax, pattern);
+    push_quad_uv(verts, b3, b0, t0, t3, -xp, color, rough, metal,
+                 0, zmin, sy, zmin, sy, zmax, 0, zmax, pattern);
+    push_quad_uv(verts, b2, b3, t3, t2, yp, color, rough, metal,
+                 0, zmin, sx, zmin, sx, zmax, 0, zmax, pattern);
+    push_quad_uv(verts, b0, b1, t1, t0, -yp, color, rough, metal,
+                 0, zmin, sx, zmin, sx, zmax, 0, zmax, pattern);
+    (void)sz;
 }
 
 void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
@@ -264,12 +331,21 @@ void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
     const QVector3D color(w.color.r, w.color.g, w.color.b);
     const float r = w.roughness;
     const float m = w.metallic;
-    push_quad(verts, t0, t1, t2, t3, up, color, r, m);
-    push_quad(verts, b3, b2, b1, b0, -up, color, r, m);
-    push_quad(verts, b0, b1, t1, t0, normal, color, r, m);
-    push_quad(verts, b2, b3, t3, t2, -normal, color, r, m);
-    push_quad(verts, b1, b2, t2, t1, unit, color, r, m);
-    push_quad(verts, b3, b0, t0, t3, -unit, color, r, m);
+    const float pat = static_cast<float>(w.pattern);
+    const float thk = static_cast<float>(w.thickness);
+    const float h_mm = static_cast<float>(w.height);
+    push_quad_uv(verts, t0, t1, t2, t3, up, color, r, m,
+                 0, 0, len, 0, len, thk, 0, thk, pat);
+    push_quad_uv(verts, b3, b2, b1, b0, -up, color, r, m,
+                 0, thk, len, thk, len, 0, 0, 0, pat);
+    push_quad_uv(verts, b0, b1, t1, t0, normal, color, r, m,
+                 0, 0, len, 0, len, h_mm, 0, h_mm, pat);
+    push_quad_uv(verts, b2, b3, t3, t2, -normal, color, r, m,
+                 0, 0, len, 0, len, h_mm, 0, h_mm, pat);
+    push_quad_uv(verts, b1, b2, t2, t1, unit, color, r, m,
+                 0, 0, thk, 0, thk, h_mm, 0, h_mm, pat);
+    push_quad_uv(verts, b3, b0, t0, t3, -unit, color, r, m,
+                 0, 0, thk, 0, thk, h_mm, 0, h_mm, pat);
 }
 
 void push_ground_grid(std::vector<Vertex>& verts, float size) {
@@ -347,7 +423,7 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(b.base_z + b.height),
                           static_cast<float>(b.rotation_z),
                           QVector3D(b.color.r, b.color.g, b.color.b),
-                          b.roughness, b.metallic);
+                          b.roughness, b.metallic, static_cast<float>(b.pattern));
     }
     for (const auto& [id, c] : document_.cylinders()) {
         const QVector3D center(static_cast<float>(c.position.x()),
@@ -356,7 +432,7 @@ void Viewport3D::rebuild_mesh() {
                       static_cast<float>(c.base_z),
                       static_cast<float>(c.base_z + c.height),
                       QVector3D(c.color.r, c.color.g, c.color.b),
-                      c.roughness, c.metallic);
+                      c.roughness, c.metallic, static_cast<float>(c.pattern));
     }
     for (const auto& [id, block] : document_.blocks()) {
         for (const auto& local_b : block.boxes) {
@@ -370,7 +446,7 @@ void Viewport3D::rebuild_mesh() {
                               static_cast<float>(b.base_z + b.height),
                               static_cast<float>(b.rotation_z),
                               QVector3D(b.color.r, b.color.g, b.color.b),
-                              b.roughness, b.metallic);
+                              b.roughness, b.metallic, static_cast<float>(b.pattern));
         }
         for (const auto& local_c : block.cylinders) {
             const auto c = block.world_cylinder(local_c);
@@ -380,7 +456,7 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(c.base_z),
                           static_cast<float>(c.base_z + c.height),
                           QVector3D(c.color.r, c.color.g, c.color.b),
-                          c.roughness, c.metallic);
+                          c.roughness, c.metallic, static_cast<float>(c.pattern));
         }
     }
     for (const auto& [id, m] : document_.meshes()) {
@@ -394,12 +470,16 @@ void Viewport3D::rebuild_mesh() {
             const auto& n0 = i < m.normals.size() ? m.normals[m.indices[i]] : Eigen::Vector3f::UnitZ();
             const auto& n1 = i + 1 < m.normals.size() ? m.normals[m.indices[i + 1]] : Eigen::Vector3f::UnitZ();
             const auto& n2 = i + 2 < m.normals.size() ? m.normals[m.indices[i + 2]] : Eigen::Vector3f::UnitZ();
+            const float pat = static_cast<float>(m.pattern);
             verts.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
-                             color.x(), color.y(), color.z(), rough, metal});
+                             color.x(), color.y(), color.z(), rough, metal,
+                             p0.x(), p0.y(), pat});
             verts.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
-                             color.x(), color.y(), color.z(), rough, metal});
+                             color.x(), color.y(), color.z(), rough, metal,
+                             p1.x(), p1.y(), pat});
             verts.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
-                             color.x(), color.y(), color.z(), rough, metal});
+                             color.x(), color.y(), color.z(), rough, metal,
+                             p2.x(), p2.y(), pat});
         }
     }
     for (const auto& [id, s] : document_.slabs()) {
@@ -474,6 +554,8 @@ void Viewport3D::rebuild_mesh() {
     program_->enableAttributeArray(2);
     program_->setAttributeBuffer(3, GL_FLOAT, sizeof(float) * 9, 2, sizeof(Vertex));
     program_->enableAttributeArray(3);
+    program_->setAttributeBuffer(4, GL_FLOAT, sizeof(float) * 11, 3, sizeof(Vertex));
+    program_->enableAttributeArray(4);
     vbo_.release();
     vao_.release();
 
@@ -490,10 +572,12 @@ void Viewport3D::rebuild_mesh() {
             const auto& b = samples[i];
             line_verts.push_back({static_cast<float>(a.x()), static_cast<float>(a.y()),
                                   static_cast<float>(a.z()),
-                                  0.0f, 0.0f, 1.0f, cr, cg, cb, 1.0f, 0.0f});
+                                  0.0f, 0.0f, 1.0f, cr, cg, cb, 1.0f, 0.0f,
+                                  0.0f, 0.0f, 0.0f});
             line_verts.push_back({static_cast<float>(b.x()), static_cast<float>(b.y()),
                                   static_cast<float>(b.z()),
-                                  0.0f, 0.0f, 1.0f, cr, cg, cb, 1.0f, 0.0f});
+                                  0.0f, 0.0f, 1.0f, cr, cg, cb, 1.0f, 0.0f,
+                                  0.0f, 0.0f, 0.0f});
         }
     }
     line_vao_.bind();
@@ -508,6 +592,8 @@ void Viewport3D::rebuild_mesh() {
     program_->enableAttributeArray(2);
     program_->setAttributeBuffer(3, GL_FLOAT, sizeof(float) * 9, 2, sizeof(Vertex));
     program_->enableAttributeArray(3);
+    program_->setAttributeBuffer(4, GL_FLOAT, sizeof(float) * 11, 3, sizeof(Vertex));
+    program_->enableAttributeArray(4);
     line_vbo_.release();
     line_vao_.release();
     line_vertex_count_ = static_cast<int>(line_verts.size());
