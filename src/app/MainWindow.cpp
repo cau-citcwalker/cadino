@@ -26,6 +26,7 @@
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
+#include "NurbsCurveTool.hpp"
 #include "SlabTool.hpp"
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
@@ -33,6 +34,7 @@
 
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
+#include "command/NurbsCurveCommands.hpp"
 
 #ifdef CADINO_HAS_OPENNURBS
 #include "RhinoIO.hpp"
@@ -298,6 +300,12 @@ void MainWindow::build_toolbar() {
     group->addAction(slab_action_);
     connect(slab_action_, &QAction::triggered, this, &MainWindow::activate_slab_tool);
 
+    curve_action_ = tools->addAction("NURBS Curve");
+    curve_action_->setCheckable(true);
+    curve_action_->setShortcut(QKeySequence("U"));
+    group->addAction(curve_action_);
+    connect(curve_action_, &QAction::triggered, this, &MainWindow::activate_curve_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -364,6 +372,13 @@ void MainWindow::activate_window_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::DoorTool>(true));
     if (window_action_) window_action_->setChecked(true);
     statusBar()->showMessage("Window tool — click on a wall to place a window");
+}
+
+void MainWindow::activate_curve_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::NurbsCurveTool>());
+    if (curve_action_) curve_action_->setChecked(true);
+    statusBar()->showMessage(
+        "NURBS curve — left-click adds control points, right-click to finish (Esc cancels)");
 }
 
 void MainWindow::activate_slab_tool() {
@@ -633,6 +648,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::Cylinder:
                 stack_.execute(std::make_unique<cadino::core::RemoveCylinderCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::NurbsCurve:
+                stack_.execute(std::make_unique<cadino::core::RemoveNurbsCurveCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

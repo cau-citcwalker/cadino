@@ -29,6 +29,7 @@ EntityId Document::add_slab(Slab slab)     { return insert_with_id(slabs_,   std
 EntityId Document::add_box(Box box)        { return insert_with_id(boxes_,   std::move(box));  }
 EntityId Document::add_cylinder(Cylinder c){ return insert_with_id(cylinders_, std::move(c));  }
 EntityId Document::add_mesh(MeshGeometry m){ return insert_with_id(meshes_,   std::move(m));  }
+EntityId Document::add_curve(NurbsCurve c){ return insert_with_id(curves_,    std::move(c));  }
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }
@@ -44,6 +45,8 @@ const Cylinder*     Document::find_cylinder(EntityId id) const { return find_in(
 Cylinder*           Document::find_cylinder(EntityId id)       { return find_in(cylinders_, id); }
 const MeshGeometry* Document::find_mesh(EntityId id)     const { return find_in(meshes_, id); }
 MeshGeometry*       Document::find_mesh(EntityId id)           { return find_in(meshes_, id); }
+const NurbsCurve*   Document::find_curve(EntityId id)    const { return find_in(curves_, id); }
+NurbsCurve*         Document::find_curve(EntityId id)          { return find_in(curves_, id); }
 
 bool Document::remove_wall(EntityId id)   { return walls_.erase(id)   > 0; }
 bool Document::remove_door(EntityId id)   { return doors_.erase(id)   > 0; }
@@ -52,5 +55,6 @@ bool Document::remove_slab(EntityId id)   { return slabs_.erase(id)   > 0; }
 bool Document::remove_box(EntityId id)      { return boxes_.erase(id)     > 0; }
 bool Document::remove_cylinder(EntityId id) { return cylinders_.erase(id) > 0; }
 bool Document::remove_mesh(EntityId id)     { return meshes_.erase(id)     > 0; }
+bool Document::remove_curve(EntityId id)    { return curves_.erase(id)    > 0; }
 
 }  // namespace cadino::core

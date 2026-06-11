@@ -6,6 +6,7 @@
 #include "entity/Cylinder.hpp"
 #include "entity/Door.hpp"
 #include "entity/MeshGeometry.hpp"
+#include "entity/NurbsCurve.hpp"
 #include "entity/Slab.hpp"
 #include "entity/Wall.hpp"
 #include "entity/Window.hpp"
@@ -21,6 +22,7 @@ public:
     EntityId add_box(Box box);
     EntityId add_cylinder(Cylinder cyl);
     EntityId add_mesh(MeshGeometry mesh);
+    EntityId add_curve(NurbsCurve curve);
 
     [[nodiscard]] const Wall* find_wall(EntityId id) const;
     [[nodiscard]] Wall* find_wall(EntityId id);
@@ -36,6 +38,8 @@ public:
     [[nodiscard]] Cylinder* find_cylinder(EntityId id);
     [[nodiscard]] const MeshGeometry* find_mesh(EntityId id) const;
     [[nodiscard]] MeshGeometry* find_mesh(EntityId id);
+    [[nodiscard]] const NurbsCurve* find_curve(EntityId id) const;
+    [[nodiscard]] NurbsCurve* find_curve(EntityId id);
 
     bool remove_wall(EntityId id);
     bool remove_door(EntityId id);
@@ -44,6 +48,7 @@ public:
     bool remove_box(EntityId id);
     bool remove_cylinder(EntityId id);
     bool remove_mesh(EntityId id);
+    bool remove_curve(EntityId id);
 
     [[nodiscard]] const std::unordered_map<EntityId, Wall>& walls() const noexcept { return walls_; }
     [[nodiscard]] const std::unordered_map<EntityId, Door>& doors() const noexcept { return doors_; }
@@ -52,10 +57,11 @@ public:
     [[nodiscard]] const std::unordered_map<EntityId, Box>& boxes() const noexcept { return boxes_; }
     [[nodiscard]] const std::unordered_map<EntityId, Cylinder>& cylinders() const noexcept { return cylinders_; }
     [[nodiscard]] const std::unordered_map<EntityId, MeshGeometry>& meshes() const noexcept { return meshes_; }
+    [[nodiscard]] const std::unordered_map<EntityId, NurbsCurve>& curves() const noexcept { return curves_; }
 
     [[nodiscard]] std::size_t entity_count() const noexcept {
         return walls_.size() + doors_.size() + windows_.size() + slabs_.size() +
-               boxes_.size() + cylinders_.size() + meshes_.size();
+               boxes_.size() + cylinders_.size() + meshes_.size() + curves_.size();
     }
 
 private:
@@ -66,6 +72,7 @@ private:
     std::unordered_map<EntityId, Box> boxes_;
     std::unordered_map<EntityId, Cylinder> cylinders_;
     std::unordered_map<EntityId, MeshGeometry> meshes_;
+    std::unordered_map<EntityId, NurbsCurve> curves_;
 };
 
 }  // namespace cadino::core

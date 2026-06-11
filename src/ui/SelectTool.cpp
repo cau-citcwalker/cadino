@@ -101,6 +101,19 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
             best = {id, SelectKind::Wall};
         }
     }
+    for (const auto& [id, curve] : doc.curves()) {
+        const auto samples = curve.tessellate(96);
+        if (samples.size() < 2) continue;
+        for (std::size_t i = 1; i < samples.size(); ++i) {
+            const QPointF a{samples[i - 1].x(), samples[i - 1].y()};
+            const QPointF b{samples[i].x(), samples[i].y()};
+            const double d = distance_point_to_segment(model_pos, a, b);
+            if (d <= pick_radius && d < best_dist) {
+                best_dist = d;
+                best = {id, SelectKind::NurbsCurve};
+            }
+        }
+    }
     return best;
 }
 
@@ -335,6 +348,15 @@ void SelectTool::paint_overlay(QPainter& p, const PlanView& view) const {
             const QPointF center_s = view.model_to_screen({c->position.x(), c->position.y()});
             const double r_s = c->radius * view.zoom();
             p.drawEllipse(center_s, r_s, r_s);
+        } else if (sel.kind == SelectKind::NurbsCurve) {
+            const auto* curve = view.document().find_curve(sel.id);
+            if (!curve) continue;
+            const auto samples = curve->tessellate(96);
+            for (std::size_t i = 1; i < samples.size(); ++i) {
+                p.drawLine(
+                    view.model_to_screen({samples[i - 1].x(), samples[i - 1].y()}),
+                    view.model_to_screen({samples[i].x(), samples[i].y()}));
+            }
         }
     }
 }

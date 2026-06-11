@@ -65,6 +65,39 @@ QJsonObject to_json(const cadino::core::Box& b) {
     return o;
 }
 
+QJsonObject to_json(const cadino::core::NurbsCurve& nc) {
+    QJsonObject o;
+    o["id"] = qint64(nc.id.value);
+    o["group_id"] = qint64(nc.group_id.value);
+    o["degree"] = nc.degree;
+    o["color"] = color_array(nc.color);
+    o["line_width"] = nc.line_width;
+    QJsonArray pts;
+    for (const auto& p : nc.control_points) {
+        QJsonArray a;
+        a << p.x() << p.y() << p.z();
+        pts.append(a);
+    }
+    o["control_points"] = pts;
+    return o;
+}
+
+cadino::core::NurbsCurve curve_from(const QJsonObject& o) {
+    cadino::core::NurbsCurve nc;
+    nc.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    nc.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    nc.degree = o["degree"].toInt(nc.degree);
+    if (o.contains("color")) nc.color = color_from(o["color"].toArray());
+    nc.line_width = static_cast<float>(o["line_width"].toDouble(nc.line_width));
+    for (const auto& v : o["control_points"].toArray()) {
+        const auto a = v.toArray();
+        if (a.size() >= 3) {
+            nc.control_points.emplace_back(a[0].toDouble(), a[1].toDouble(), a[2].toDouble());
+        }
+    }
+    return nc;
+}
+
 QJsonObject to_json(const cadino::core::Cylinder& c) {
     QJsonObject o;
     o["id"] = qint64(c.id.value);
@@ -227,6 +260,10 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     for (const auto& [id, s] : doc.slabs()) slabs_json.append(to_json(s));
     root["slabs"] = slabs_json;
 
+    QJsonArray curves_json;
+    for (const auto& [id, c] : doc.curves()) curves_json.append(to_json(c));
+    root["curves"] = curves_json;
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         if (error) *error = file.errorString();
@@ -290,6 +327,11 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto s = slab_from(v.toObject());
         max_id = std::max(max_id, s.id.value);
         loaded.add_slab(std::move(s));
+    }
+    for (const auto& v : root["curves"].toArray()) {
+        auto c = curve_from(v.toObject());
+        max_id = std::max(max_id, c.id.value);
+        loaded.add_curve(std::move(c));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

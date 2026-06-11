@@ -46,6 +46,7 @@ private:
     void activate_door_tool();
     void activate_window_tool();
     void activate_slab_tool();
+    void activate_curve_tool();
     void delete_selected();
     void group_selected();
     void ungroup_selected();
@@ -82,6 +83,7 @@ private:
     QAction* door_action_{nullptr};
     QAction* window_action_{nullptr};
     QAction* slab_action_{nullptr};
+    QAction* curve_action_{nullptr};
     QAction* mode_plan_action_{nullptr};
     QAction* mode_front_action_{nullptr};
     QAction* mode_side_action_{nullptr};

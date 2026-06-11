@@ -110,6 +110,10 @@ void main() {
         frag_color = vec4(0.02, 0.02, 0.04, 0.30);
         return;
     }
+    if (u_shadow_mode == 2) {
+        frag_color = vec4(v_color, 1.0);
+        return;
+    }
     vec3 N = normalize(v_normal);
     if (!gl_FrontFacing) N = -N;
 
@@ -314,6 +318,10 @@ void Viewport3D::initializeGL() {
     vao_.create();
     vbo_.create();
     vbo_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+
+    line_vao_.create();
+    line_vbo_.create();
+    line_vbo_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
 }
 
 void Viewport3D::resizeGL(int w, int h) {
@@ -445,7 +453,42 @@ void Viewport3D::rebuild_mesh() {
     vao_.release();
 
     vertex_count_ = static_cast<int>(verts.size());
+
+    // ---- Line geometry pass for NURBS curves ----
+    std::vector<Vertex> line_verts;
+    for (const auto& [id, curve] : document_.curves()) {
+        const auto samples = curve.tessellate(128);
+        if (samples.size() < 2) continue;
+        const float cr = curve.color.r, cg = curve.color.g, cb = curve.color.b;
+        for (std::size_t i = 1; i < samples.size(); ++i) {
+            const auto& a = samples[i - 1];
+            const auto& b = samples[i];
+            line_verts.push_back({static_cast<float>(a.x()), static_cast<float>(a.y()),
+                                  static_cast<float>(a.z()),
+                                  0.0f, 0.0f, 1.0f, cr, cg, cb, 1.0f, 0.0f});
+            line_verts.push_back({static_cast<float>(b.x()), static_cast<float>(b.y()),
+                                  static_cast<float>(b.z()),
+                                  0.0f, 0.0f, 1.0f, cr, cg, cb, 1.0f, 0.0f});
+        }
+    }
+    line_vao_.bind();
+    line_vbo_.bind();
+    line_vbo_.allocate(line_verts.data(),
+                       static_cast<int>(line_verts.size() * sizeof(Vertex)));
+    program_->setAttributeBuffer(0, GL_FLOAT, 0, 3, sizeof(Vertex));
+    program_->enableAttributeArray(0);
+    program_->setAttributeBuffer(1, GL_FLOAT, sizeof(float) * 3, 3, sizeof(Vertex));
+    program_->enableAttributeArray(1);
+    program_->setAttributeBuffer(2, GL_FLOAT, sizeof(float) * 6, 3, sizeof(Vertex));
+    program_->enableAttributeArray(2);
+    program_->setAttributeBuffer(3, GL_FLOAT, sizeof(float) * 9, 2, sizeof(Vertex));
+    program_->enableAttributeArray(3);
+    line_vbo_.release();
+    line_vao_.release();
+    line_vertex_count_ = static_cast<int>(line_verts.size());
+
     last_wall_count_ = document_.walls().size();
+    last_curve_count_ = document_.curves().size();
     mesh_dirty_ = false;
 }
 
@@ -540,6 +583,16 @@ void Viewport3D::paintGL() {
     }
 
     vao_.release();
+
+    if (line_vertex_count_ > 0) {
+        line_vao_.bind();
+        program_->setUniformValue("u_model", identity);
+        program_->setUniformValue("u_shadow_mode", 2);
+        glLineWidth(2.5f);
+        glDrawArrays(GL_LINES, 0, line_vertex_count_);
+        line_vao_.release();
+    }
+
     program_->release();
 }
 

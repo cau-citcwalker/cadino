@@ -116,6 +116,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_cylinders(p);
     draw_walls(p);
     draw_doors_windows(p);
+    draw_curves(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -335,6 +336,44 @@ void PlanView::draw_walls(QPainter& p) {
         poly << model_to_screen(p1) << model_to_screen(p2)
              << model_to_screen(p3) << model_to_screen(p4);
         p.drawPolygon(poly);
+    }
+}
+
+void PlanView::draw_curves(QPainter& p) {
+    for (const auto& [id, curve] : document_.curves()) {
+        const auto samples = curve.tessellate(128);
+        if (samples.size() < 2) continue;
+
+        const bool selected = is_selected({id, SelectKind::NurbsCurve});
+        QPen pen(QColor::fromRgbF(curve.color.r, curve.color.g, curve.color.b),
+                 selected ? curve.line_width + 1.5f : curve.line_width);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+
+        for (std::size_t i = 1; i < samples.size(); ++i) {
+            const QPointF a = model_to_screen({samples[i - 1].x(), samples[i - 1].y()});
+            const QPointF b = model_to_screen({samples[i].x(), samples[i].y()});
+            p.drawLine(a, b);
+        }
+
+        if (selected) {
+            QPen poly_pen(QColor(150, 150, 160, 200), 1, Qt::DotLine);
+            poly_pen.setCosmetic(true);
+            p.setPen(poly_pen);
+            for (std::size_t i = 1; i < curve.control_points.size(); ++i) {
+                const QPointF a = model_to_screen(
+                    {curve.control_points[i - 1].x(), curve.control_points[i - 1].y()});
+                const QPointF b = model_to_screen(
+                    {curve.control_points[i].x(), curve.control_points[i].y()});
+                p.drawLine(a, b);
+            }
+            p.setBrush(QColor(80, 220, 240));
+            p.setPen(Qt::NoPen);
+            for (const auto& cp : curve.control_points) {
+                p.drawEllipse(model_to_screen({cp.x(), cp.y()}), 4, 4);
+            }
+        }
     }
 }
 

@@ -6,6 +6,7 @@ add_library(cadino_ui STATIC
     CylinderTool.cpp
     DoorTool.cpp
     SlabTool.cpp
+    NurbsCurveTool.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
     Snap.cpp

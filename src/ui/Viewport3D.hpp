@@ -71,10 +71,14 @@ private:
     std::unique_ptr<QOpenGLShaderProgram> program_;
     QOpenGLVertexArrayObject vao_;
     QOpenGLBuffer vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject line_vao_;
+    QOpenGLBuffer line_vbo_{QOpenGLBuffer::VertexBuffer};
     int vertex_count_{0};
+    int line_vertex_count_{0};
     int walls_vertex_end_{6};
     bool mesh_dirty_{true};
     std::size_t last_wall_count_{0};
+    std::size_t last_curve_count_{0};
 
     QVector3D camera_target_{0.0f, 0.0f, 1200.0f};
     float camera_yaw_{-45.0f};

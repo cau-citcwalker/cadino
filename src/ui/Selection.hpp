@@ -9,6 +9,7 @@ enum class SelectKind {
     Wall,
     Box,
     Cylinder,
+    NurbsCurve,
 };
 
 struct Selection {

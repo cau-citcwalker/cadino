@@ -1,11 +1,13 @@
 add_library(cadino_core STATIC
     entity/Wall.cpp
+    entity/NurbsCurve.cpp
     document/Document.cpp
     command/CommandStack.cpp
     command/WallCommands.cpp
     command/BoxCommands.cpp
     command/CylinderCommands.cpp
     command/DoorWindowSlabCommands.cpp
+    command/NurbsCurveCommands.cpp
 )
 
 target_include_directories(cadino_core
