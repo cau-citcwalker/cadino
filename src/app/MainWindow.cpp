@@ -149,6 +149,17 @@ void MainWindow::build_menu() {
     connect(save_as_a, &QAction::triggered, this, [this] { (void)save_document_as(); });
 
     file_menu->addSeparator();
+    auto* elevations_menu = file_menu->addMenu("Export &Elevation");
+    auto* front_a = elevations_menu->addAction("&Front (XZ)");
+    connect(front_a, &QAction::triggered, this, [this] { export_elevation_dxf(0); });
+    auto* back_a = elevations_menu->addAction("&Back (XZ, mirrored)");
+    connect(back_a, &QAction::triggered, this, [this] { export_elevation_dxf(1); });
+    auto* left_a = elevations_menu->addAction("&Left (YZ)");
+    connect(left_a, &QAction::triggered, this, [this] { export_elevation_dxf(2); });
+    auto* right_a = elevations_menu->addAction("&Right (YZ)");
+    connect(right_a, &QAction::triggered, this, [this] { export_elevation_dxf(3); });
+
+    file_menu->addSeparator();
     auto* import_3dm_a = file_menu->addAction("&Import Rhino 3DM...");
     connect(import_3dm_a, &QAction::triggered, this, &MainWindow::import_3dm);
 
@@ -527,6 +538,33 @@ void MainWindow::export_dxf() {
         return;
     }
     statusBar()->showMessage(QString("Exported DXF to %1").arg(path));
+}
+
+void MainWindow::export_elevation_dxf(int plane_index) {
+    cadino::ui::ElevationPlane plane = cadino::ui::ElevationPlane::Front;
+    QString name = "front";
+    switch (plane_index) {
+        case 0: plane = cadino::ui::ElevationPlane::Front; name = "front"; break;
+        case 1: plane = cadino::ui::ElevationPlane::Back;  name = "back";  break;
+        case 2: plane = cadino::ui::ElevationPlane::Left;  name = "left";  break;
+        case 3: plane = cadino::ui::ElevationPlane::Right; name = "right"; break;
+    }
+    QString suggested = current_file_path_;
+    if (!suggested.isEmpty()) {
+        const QFileInfo fi(suggested);
+        suggested = fi.absolutePath() + "/" + fi.baseName() + "-" + name + ".dxf";
+    }
+    QString path = QFileDialog::getSaveFileName(
+        this, QString("Export %1 elevation").arg(name), suggested, "AutoCAD DXF (*.dxf)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".dxf", Qt::CaseInsensitive)) path += ".dxf";
+
+    QString error;
+    if (!cadino::ui::export_elevation_as_dxf(document_, plane, path, &error)) {
+        QMessageBox::warning(this, "Export failed", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported %1 elevation to %2").arg(name, path));
 }
 
 void MainWindow::import_3dm() {
