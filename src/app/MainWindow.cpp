@@ -204,6 +204,14 @@ void MainWindow::build_menu() {
     subtract_a->setShortcut(QKeySequence("Ctrl+Minus"));
     connect(subtract_a, &QAction::triggered, this, &MainWindow::subtract_selected);
 
+    auto* union_a = edit_menu->addAction("&Union");
+    union_a->setShortcut(QKeySequence("Ctrl+Shift+U"));
+    connect(union_a, &QAction::triggered, this, &MainWindow::union_selected);
+
+    auto* intersect_a = edit_menu->addAction("&Intersect");
+    intersect_a->setShortcut(QKeySequence("Ctrl+Shift+I"));
+    connect(intersect_a, &QAction::triggered, this, &MainWindow::intersect_selected);
+
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (Top)");
     mode_plan_action_->setCheckable(true);
@@ -594,6 +602,15 @@ void MainWindow::group_selected() {
     statusBar()->showMessage(QString("Grouped %1 entities").arg(selections.size()));
 }
 
+namespace {
+
+void remove_entity(cadino::core::Document& doc, const cadino::ui::Selection& sel) {
+    if (sel.kind == cadino::ui::SelectKind::Box) doc.remove_box(sel.id);
+    else if (sel.kind == cadino::ui::SelectKind::Cylinder) doc.remove_cylinder(sel.id);
+}
+
+}  // namespace
+
 void MainWindow::subtract_selected() {
     const auto selections = plan_view_->selections();
     if (selections.size() != 2) {
@@ -608,14 +625,52 @@ void MainWindow::subtract_selected() {
         return;
     }
     const auto id = document_.add_mesh(std::move(*result));
-    if (target.kind == cadino::ui::SelectKind::Box) document_.remove_box(target.id);
-    else if (target.kind == cadino::ui::SelectKind::Cylinder) document_.remove_cylinder(target.id);
-    if (tool.kind == cadino::ui::SelectKind::Box) document_.remove_box(tool.id);
-    else if (tool.kind == cadino::ui::SelectKind::Cylinder) document_.remove_cylinder(tool.id);
+    remove_entity(document_, target);
+    remove_entity(document_, tool);
 
     plan_view_->clear_selection();
     plan_view_->notify_document_modified();
     statusBar()->showMessage(QString("Created mesh from boolean cut (id=%1)").arg(id.value));
+}
+
+void MainWindow::union_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.size() != 2) {
+        statusBar()->showMessage("Union: select exactly two entities (Box or Cylinder)");
+        return;
+    }
+    auto result = cadino::ui::union_entities(document_, selections[0], selections[1]);
+    if (!result) {
+        statusBar()->showMessage("Union failed (only Box/Cylinder currently supported)");
+        return;
+    }
+    const auto id = document_.add_mesh(std::move(*result));
+    remove_entity(document_, selections[0]);
+    remove_entity(document_, selections[1]);
+
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Created mesh from boolean union (id=%1)").arg(id.value));
+}
+
+void MainWindow::intersect_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.size() != 2) {
+        statusBar()->showMessage("Intersect: select exactly two entities (Box or Cylinder)");
+        return;
+    }
+    auto result = cadino::ui::intersect_entities(document_, selections[0], selections[1]);
+    if (!result) {
+        statusBar()->showMessage("Intersect failed (only Box/Cylinder currently supported)");
+        return;
+    }
+    const auto id = document_.add_mesh(std::move(*result));
+    remove_entity(document_, selections[0]);
+    remove_entity(document_, selections[1]);
+
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Created mesh from boolean intersection (id=%1)").arg(id.value));
 }
 
 void MainWindow::ungroup_selected() {

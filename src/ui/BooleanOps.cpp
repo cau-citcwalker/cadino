@@ -4,7 +4,9 @@
 
 #include <Eigen/Geometry>
 
+#include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -126,6 +128,32 @@ subtract_entities(const cadino::core::Document& doc, Selection target, Selection
     if (!cut.IsDone()) return std::nullopt;
 
     return triangulate(cut.Shape());
+}
+
+std::optional<cadino::core::MeshGeometry>
+union_entities(const cadino::core::Document& doc, Selection a_sel, Selection b_sel) {
+    TopoDS_Shape a = shape_from_selection(doc, a_sel);
+    TopoDS_Shape b = shape_from_selection(doc, b_sel);
+    if (a.IsNull() || b.IsNull()) return std::nullopt;
+
+    BRepAlgoAPI_Fuse fuse(a, b);
+    fuse.Build();
+    if (!fuse.IsDone()) return std::nullopt;
+
+    return triangulate(fuse.Shape());
+}
+
+std::optional<cadino::core::MeshGeometry>
+intersect_entities(const cadino::core::Document& doc, Selection a_sel, Selection b_sel) {
+    TopoDS_Shape a = shape_from_selection(doc, a_sel);
+    TopoDS_Shape b = shape_from_selection(doc, b_sel);
+    if (a.IsNull() || b.IsNull()) return std::nullopt;
+
+    BRepAlgoAPI_Common common(a, b);
+    common.Build();
+    if (!common.IsDone()) return std::nullopt;
+
+    return triangulate(common.Shape());
 }
 
 }  // namespace cadino::ui
