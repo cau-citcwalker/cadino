@@ -8,6 +8,7 @@ add_library(cadino_core STATIC
     command/CylinderCommands.cpp
     command/DoorWindowSlabCommands.cpp
     command/NurbsCurveCommands.cpp
+    command/BlockCommands.cpp
 )
 
 target_include_directories(cadino_core

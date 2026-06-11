@@ -32,6 +32,7 @@
 #include "WallTool.hpp"
 #include <QKeySequence>
 
+#include "command/BlockCommands.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
@@ -211,6 +212,15 @@ void MainWindow::build_menu() {
     auto* intersect_a = edit_menu->addAction("&Intersect");
     intersect_a->setShortcut(QKeySequence("Ctrl+Shift+I"));
     connect(intersect_a, &QAction::triggered, this, &MainWindow::intersect_selected);
+
+    edit_menu->addSeparator();
+    auto* make_block_a = edit_menu->addAction("Make &Block");
+    make_block_a->setShortcut(QKeySequence("Ctrl+Alt+G"));
+    connect(make_block_a, &QAction::triggered, this, &MainWindow::make_block_from_selected);
+
+    auto* explode_a = edit_menu->addAction("E&xplode Block");
+    explode_a->setShortcut(QKeySequence("Ctrl+Alt+X"));
+    connect(explode_a, &QAction::triggered, this, &MainWindow::explode_selected_block);
 
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (Top)");
@@ -653,6 +663,116 @@ void MainWindow::union_selected() {
     statusBar()->showMessage(QString("Created mesh from boolean union (id=%1)").arg(id.value));
 }
 
+void MainWindow::make_block_from_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.empty()) {
+        statusBar()->showMessage("Make Block: select boxes / cylinders first");
+        return;
+    }
+
+    std::vector<cadino::core::Box> boxes;
+    std::vector<cadino::core::Cylinder> cylinders;
+    double sx = 0.0, sy = 0.0;
+    int count = 0;
+    for (const auto& sel : selections) {
+        if (sel.kind == cadino::ui::SelectKind::Box) {
+            if (const auto* b = document_.find_box(sel.id)) {
+                boxes.push_back(*b);
+                sx += b->position.x();
+                sy += b->position.y();
+                ++count;
+            }
+        } else if (sel.kind == cadino::ui::SelectKind::Cylinder) {
+            if (const auto* c = document_.find_cylinder(sel.id)) {
+                cylinders.push_back(*c);
+                sx += c->position.x();
+                sy += c->position.y();
+                ++count;
+            }
+        }
+    }
+    if (count == 0) {
+        statusBar()->showMessage("Make Block: select boxes or cylinders only");
+        return;
+    }
+
+    const double cx = sx / count;
+    const double cy = sy / count;
+    cadino::core::Block block;
+    block.name = "Block";
+    block.position = {cx, cy};
+    block.rotation_z = 0.0;
+    block.base_z = 0.0;
+    for (auto b : boxes) {
+        b.id = {};
+        b.position = {b.position.x() - cx, b.position.y() - cy};
+        block.boxes.push_back(std::move(b));
+    }
+    for (auto c : cylinders) {
+        c.id = {};
+        c.position = {c.position.x() - cx, c.position.y() - cy};
+        block.cylinders.push_back(std::move(c));
+    }
+
+    // Remove originals + add block as one composite command sequence.
+    for (const auto& sel : selections) {
+        if (sel.kind == cadino::ui::SelectKind::Box) {
+            stack_.execute(std::make_unique<cadino::core::RemoveBoxCommand>(sel.id));
+        } else if (sel.kind == cadino::ui::SelectKind::Cylinder) {
+            stack_.execute(std::make_unique<cadino::core::RemoveCylinderCommand>(sel.id));
+        }
+    }
+    stack_.execute(std::make_unique<cadino::core::AddBlockCommand>(std::move(block)));
+
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Packed %1 entities into a Block").arg(count));
+}
+
+void MainWindow::explode_selected_block() {
+    const auto selections = plan_view_->selections();
+    if (selections.empty()) {
+        statusBar()->showMessage("Explode: select a Block first");
+        return;
+    }
+    int exploded = 0;
+    for (const auto& sel : selections) {
+        if (sel.kind != cadino::ui::SelectKind::Block) continue;
+        const auto* bl = document_.find_block(sel.id);
+        if (!bl) continue;
+        // Snapshot children in world coordinates.
+        std::vector<cadino::core::Box> world_boxes;
+        std::vector<cadino::core::Cylinder> world_cyls;
+        world_boxes.reserve(bl->boxes.size());
+        world_cyls.reserve(bl->cylinders.size());
+        for (const auto& local_b : bl->boxes) {
+            auto wb = bl->world_box(local_b);
+            wb.id = {};
+            world_boxes.push_back(std::move(wb));
+        }
+        for (const auto& local_c : bl->cylinders) {
+            auto wc = bl->world_cylinder(local_c);
+            wc.id = {};
+            world_cyls.push_back(std::move(wc));
+        }
+        stack_.execute(std::make_unique<cadino::core::RemoveBlockCommand>(sel.id));
+        for (auto& wb : world_boxes) {
+            stack_.execute(std::make_unique<cadino::core::AddBoxCommand>(std::move(wb)));
+        }
+        for (auto& wc : world_cyls) {
+            stack_.execute(std::make_unique<cadino::core::AddCylinderCommand>(std::move(wc)));
+        }
+        ++exploded;
+    }
+    if (exploded == 0) {
+        statusBar()->showMessage("Explode: no Block in selection");
+        return;
+    }
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Exploded %1 block(s)").arg(exploded));
+}
+
 void MainWindow::intersect_selected() {
     const auto selections = plan_view_->selections();
     if (selections.size() != 2) {
@@ -706,6 +826,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::NurbsCurve:
                 stack_.execute(std::make_unique<cadino::core::RemoveNurbsCurveCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::Block:
+                stack_.execute(std::make_unique<cadino::core::RemoveBlockCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

@@ -50,6 +50,8 @@ private:
     void delete_selected();
     void group_selected();
     void ungroup_selected();
+    void make_block_from_selected();
+    void explode_selected_block();
     void subtract_selected();
     void union_selected();
     void intersect_selected();

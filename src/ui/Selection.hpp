@@ -10,6 +10,7 @@ enum class SelectKind {
     Box,
     Cylinder,
     NurbsCurve,
+    Block,
 };
 
 struct Selection {

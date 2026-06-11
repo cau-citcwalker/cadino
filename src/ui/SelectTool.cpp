@@ -10,6 +10,7 @@
 #include <QRectF>
 
 #include "PlanView.hpp"
+#include "command/BlockCommands.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
 #include "command/CylinderCommands.hpp"
@@ -114,6 +115,30 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
             }
         }
     }
+    for (const auto& [id, block] : doc.blocks()) {
+        bool hit = false;
+        for (const auto& local_b : block.boxes) {
+            if (point_in_box_footprint(model_pos, block.world_box(local_b))) {
+                hit = true;
+                break;
+            }
+        }
+        if (!hit) {
+            for (const auto& local_c : block.cylinders) {
+                const auto c = block.world_cylinder(local_c);
+                if (std::hypot(model_pos.x() - c.position.x(),
+                               model_pos.y() - c.position.y()) <= c.radius) {
+                    hit = true;
+                    break;
+                }
+            }
+        }
+        if (hit) {
+            best_dist = 0;
+            best = {id, SelectKind::Block};
+            break;
+        }
+    }
     return best;
 }
 
@@ -177,6 +202,10 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
             if (const auto* c = doc.find_cylinder(sel.id)) {
                 drag_originals_.emplace(sel.id, *c);
             }
+        } else if (sel.kind == SelectKind::Block) {
+            if (const auto* b = doc.find_block(sel.id)) {
+                drag_originals_.emplace(sel.id, *b);
+            }
         }
     }
     drag_start_ = model_pos;
@@ -214,6 +243,11 @@ void SelectTool::on_move(PlanView& view, QPointF model_pos) {
             if (!c) continue;
             const auto& orig = std::get<cadino::core::Cylinder>(it->second);
             c->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
+        } else if (sel.kind == SelectKind::Block) {
+            auto* bl = doc.find_block(sel.id);
+            if (!bl) continue;
+            const auto& orig = std::get<cadino::core::Block>(it->second);
+            bl->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
         }
     }
     view.update();
@@ -297,6 +331,14 @@ void SelectTool::on_release(PlanView& view, QPointF model_pos, Qt::MouseButton b
             *c = orig;
             view.command_stack().execute(
                 std::make_unique<cadino::core::ModifyCylinderCommand>(sel.id, std::move(after)));
+        } else if (sel.kind == SelectKind::Block) {
+            auto* bl = doc.find_block(sel.id);
+            if (!bl) continue;
+            const auto& orig = std::get<cadino::core::Block>(it->second);
+            cadino::core::Block after = *bl;
+            *bl = orig;
+            view.command_stack().execute(
+                std::make_unique<cadino::core::ModifyBlockCommand>(sel.id, std::move(after)));
         }
     }
     drag_originals_.clear();

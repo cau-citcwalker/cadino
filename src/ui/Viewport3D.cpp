@@ -358,6 +358,31 @@ void Viewport3D::rebuild_mesh() {
                       QVector3D(c.color.r, c.color.g, c.color.b),
                       c.roughness, c.metallic);
     }
+    for (const auto& [id, block] : document_.blocks()) {
+        for (const auto& local_b : block.boxes) {
+            const auto b = block.world_box(local_b);
+            const QVector3D center(static_cast<float>(b.position.x()),
+                                   static_cast<float>(b.position.y()), 0.0f);
+            push_oriented_box(verts, center,
+                              static_cast<float>(b.size_xy.x() * 0.5),
+                              static_cast<float>(b.size_xy.y() * 0.5),
+                              static_cast<float>(b.base_z),
+                              static_cast<float>(b.base_z + b.height),
+                              static_cast<float>(b.rotation_z),
+                              QVector3D(b.color.r, b.color.g, b.color.b),
+                              b.roughness, b.metallic);
+        }
+        for (const auto& local_c : block.cylinders) {
+            const auto c = block.world_cylinder(local_c);
+            const QVector3D center(static_cast<float>(c.position.x()),
+                                   static_cast<float>(c.position.y()), 0.0f);
+            push_cylinder(verts, center, static_cast<float>(c.radius),
+                          static_cast<float>(c.base_z),
+                          static_cast<float>(c.base_z + c.height),
+                          QVector3D(c.color.r, c.color.g, c.color.b),
+                          c.roughness, c.metallic);
+        }
+    }
     for (const auto& [id, m] : document_.meshes()) {
         const QVector3D color(m.color.r, m.color.g, m.color.b);
         const float rough = m.roughness;

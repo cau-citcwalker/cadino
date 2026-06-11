@@ -8,6 +8,7 @@
 
 #include "Selection.hpp"
 #include "Tool.hpp"
+#include "entity/Block.hpp"
 #include "entity/Box.hpp"
 #include "entity/Cylinder.hpp"
 #include "entity/EntityId.hpp"
@@ -24,7 +25,7 @@ public:
 
 private:
     using EntitySnapshot = std::variant<cadino::core::Wall, cadino::core::Box,
-                                         cadino::core::Cylinder>;
+                                         cadino::core::Cylinder, cadino::core::Block>;
     std::unordered_map<cadino::core::EntityId, EntitySnapshot> drag_originals_;
 
     bool dragging_{false};

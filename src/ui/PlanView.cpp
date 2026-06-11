@@ -117,6 +117,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_walls(p);
     draw_doors_windows(p);
     draw_curves(p);
+    draw_blocks(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -336,6 +337,67 @@ void PlanView::draw_walls(QPainter& p) {
         poly << model_to_screen(p1) << model_to_screen(p2)
              << model_to_screen(p3) << model_to_screen(p4);
         p.drawPolygon(poly);
+    }
+}
+
+void PlanView::draw_blocks(QPainter& p) {
+    QPen block_pen(QColor(60, 60, 70));
+    block_pen.setCosmetic(true);
+    block_pen.setWidth(2);
+
+    for (const auto& [id, block] : document_.blocks()) {
+        const bool selected = is_selected({id, SelectKind::Block});
+
+        // Boxes
+        for (const auto& local_b : block.boxes) {
+            const auto b = block.world_box(local_b);
+            p.setPen(block_pen);
+            p.setBrush(QColor::fromRgbF(b.color.r, b.color.g, b.color.b, 0.55f));
+            const double hx = b.size_xy.x() * 0.5;
+            const double hy = b.size_xy.y() * 0.5;
+            const double c = std::cos(b.rotation_z);
+            const double s = std::sin(b.rotation_z);
+            const auto rot = [&](double x, double y) {
+                return QPointF(b.position.x() + c * x - s * y,
+                               b.position.y() + s * x + c * y);
+            };
+            QPolygonF poly;
+            poly << model_to_screen(rot(-hx, -hy))
+                 << model_to_screen(rot( hx, -hy))
+                 << model_to_screen(rot( hx,  hy))
+                 << model_to_screen(rot(-hx,  hy));
+            p.drawPolygon(poly);
+        }
+
+        // Cylinders
+        for (const auto& local_c : block.cylinders) {
+            const auto c = block.world_cylinder(local_c);
+            p.setPen(block_pen);
+            p.setBrush(QColor::fromRgbF(c.color.r, c.color.g, c.color.b, 0.55f));
+            const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
+            const double r_s = c.radius * zoom_;
+            p.drawEllipse(center_s, r_s, r_s);
+        }
+
+        // Origin marker + name + selection halo
+        const QPointF anchor = model_to_screen({block.position.x(), block.position.y()});
+        QPen marker_pen(selected ? QColor(60, 130, 220) : QColor(120, 120, 140),
+                        selected ? 3 : 1);
+        marker_pen.setCosmetic(true);
+        p.setPen(marker_pen);
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(anchor, 6, 6);
+        p.drawLine(anchor + QPointF(-9, 0), anchor + QPointF(9, 0));
+        p.drawLine(anchor + QPointF(0, -9), anchor + QPointF(0, 9));
+
+        if (!block.name.empty()) {
+            QFont font = p.font();
+            font.setBold(true);
+            p.setFont(font);
+            p.setPen(QColor(60, 60, 80));
+            p.drawText(anchor + QPointF(10, -10),
+                       QString::fromStdString(block.name));
+        }
     }
 }
 
