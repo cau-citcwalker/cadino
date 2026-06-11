@@ -23,6 +23,7 @@
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
 #include "DxfExporter.hpp"
+#include "MeshExport.hpp"
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
@@ -168,6 +169,12 @@ void MainWindow::build_menu() {
 
     auto* export_dxf_a = file_menu->addAction("Export &DXF...");
     connect(export_dxf_a, &QAction::triggered, this, &MainWindow::export_dxf);
+
+    auto* export_obj_a = file_menu->addAction("Export &OBJ...");
+    connect(export_obj_a, &QAction::triggered, this, &MainWindow::export_obj);
+
+    auto* export_stl_a = file_menu->addAction("Export S&TL...");
+    connect(export_stl_a, &QAction::triggered, this, &MainWindow::export_stl);
 
 #ifndef CADINO_HAS_OPENNURBS
     import_3dm_a->setEnabled(false);
@@ -538,6 +545,34 @@ void MainWindow::export_dxf() {
         return;
     }
     statusBar()->showMessage(QString("Exported DXF to %1").arg(path));
+}
+
+void MainWindow::export_obj() {
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export OBJ", current_file_path_, "Wavefront OBJ (*.obj)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".obj", Qt::CaseInsensitive)) path += ".obj";
+
+    QString error;
+    if (!cadino::ui::export_as_obj(document_, path, &error)) {
+        QMessageBox::warning(this, "Export failed", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported OBJ to %1").arg(path));
+}
+
+void MainWindow::export_stl() {
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export STL", current_file_path_, "STL (*.stl)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".stl", Qt::CaseInsensitive)) path += ".stl";
+
+    QString error;
+    if (!cadino::ui::export_as_stl(document_, path, &error)) {
+        QMessageBox::warning(this, "Export failed", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported STL to %1").arg(path));
 }
 
 void MainWindow::export_elevation_dxf(int plane_index) {

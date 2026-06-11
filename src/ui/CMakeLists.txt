@@ -13,6 +13,7 @@ add_library(cadino_ui STATIC
     DocumentIO.cpp
     DxfExporter.cpp
     BooleanOps.cpp
+    MeshExport.cpp
 )
 
 target_include_directories(cadino_ui
