@@ -25,34 +25,12 @@
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 
+#include "OcctShapes.hpp"
 #include "document/Document.hpp"
 
 namespace cadino::ui {
 
 namespace {
-
-TopoDS_Shape shape_from_box(const cadino::core::Box& b) {
-    const double hx = b.size_xy.x() * 0.5;
-    const double hy = b.size_xy.y() * 0.5;
-    BRepPrimAPI_MakeBox maker(gp_Pnt(-hx, -hy, b.base_z),
-                              gp_Pnt(hx, hy, b.base_z + b.height));
-    TopoDS_Shape s = maker.Shape();
-
-    gp_Trsf rot;
-    rot.SetRotation(gp_Ax1(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), b.rotation_z);
-    gp_Trsf trans;
-    trans.SetTranslation(gp_Vec(b.position.x(), b.position.y(), 0.0));
-    gp_Trsf combined = trans * rot;
-
-    BRepBuilderAPI_Transform t(s, combined);
-    return t.Shape();
-}
-
-TopoDS_Shape shape_from_cylinder(const cadino::core::Cylinder& c) {
-    gp_Ax2 axis(gp_Pnt(c.position.x(), c.position.y(), c.base_z), gp_Dir(0, 0, 1));
-    BRepPrimAPI_MakeCylinder maker(axis, c.radius, c.height);
-    return maker.Shape();
-}
 
 TopoDS_Shape shape_from_selection(const cadino::core::Document& doc, Selection sel) {
     if (sel.kind == SelectKind::Box) {

@@ -14,6 +14,7 @@ add_library(cadino_ui STATIC
     DocumentIO.cpp
     DxfExporter.cpp
     BooleanOps.cpp
+    OcctShapes.cpp
     MeshExport.cpp
 )
 
@@ -31,8 +32,8 @@ target_link_libraries(cadino_ui
         Qt6::OpenGLWidgets
     PRIVATE
         spdlog::spdlog
-        TKernel TKMath TKBRep TKG3d TKTopAlgo TKGeomAlgo TKGeomBase
-        TKPrim TKBO TKMesh TKShHealing
+        TKernel TKMath TKBRep TKG3d TKG2d TKTopAlgo TKGeomAlgo TKGeomBase
+        TKPrim TKBO TKMesh TKShHealing TKHLR
 )
 
 set_target_properties(cadino_ui PROPERTIES
