@@ -14,6 +14,7 @@
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
 #include "command/CylinderCommands.hpp"
+#include "command/NurbsCurveCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
 
@@ -162,6 +163,34 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
 
     const auto& doc = view.document();
     const double pick_radius = 8.0 / view.zoom();
+
+    // Highest priority: if exactly one NURBS curve is selected, attempt a hit
+    // on its control points. A successful hit enters per-point drag mode and
+    // we skip the regular pick path.
+    if (view.selections().size() == 1 &&
+        view.selections().front().kind == SelectKind::NurbsCurve) {
+        const auto sel = view.selections().front();
+        if (const auto* curve = doc.find_curve(sel.id)) {
+            int hit_idx = -1;
+            double best = pick_radius * 1.2;
+            for (std::size_t i = 0; i < curve->control_points.size(); ++i) {
+                const double d = std::hypot(
+                    model_pos.x() - curve->control_points[i].x(),
+                    model_pos.y() - curve->control_points[i].y());
+                if (d <= best) {
+                    best = d;
+                    hit_idx = static_cast<int>(i);
+                }
+            }
+            if (hit_idx >= 0) {
+                curve_point_id_ = sel.id;
+                curve_point_index_ = hit_idx;
+                curve_point_snapshot_ = *curve;
+                return;
+            }
+        }
+    }
+
     const Selection hit = pick_at(doc, model_pos, pick_radius);
     const bool shift = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
 
@@ -213,6 +242,17 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
 }
 
 void SelectTool::on_move(PlanView& view, QPointF model_pos) {
+    if (curve_point_index_ >= 0) {
+        auto& doc = view.document();
+        if (auto* curve = doc.find_curve(curve_point_id_)) {
+            if (curve_point_index_ < static_cast<int>(curve->control_points.size())) {
+                curve->control_points[static_cast<std::size_t>(curve_point_index_)] = {
+                    model_pos.x(), model_pos.y(), 0.0};
+                view.update();
+            }
+        }
+        return;
+    }
     if (rubber_banding_) {
         rubber_current_ = model_pos;
         view.update();
@@ -255,6 +295,22 @@ void SelectTool::on_move(PlanView& view, QPointF model_pos) {
 
 void SelectTool::on_release(PlanView& view, QPointF model_pos, Qt::MouseButton button) {
     if (button != Qt::LeftButton) return;
+
+    if (curve_point_index_ >= 0) {
+        auto& doc = view.document();
+        if (auto* curve = doc.find_curve(curve_point_id_)) {
+            cadino::core::NurbsCurve after = *curve;
+            *curve = curve_point_snapshot_;
+            view.command_stack().execute(
+                std::make_unique<cadino::core::ModifyNurbsCurveCommand>(
+                    curve_point_id_, std::move(after)));
+        }
+        curve_point_id_ = {};
+        curve_point_index_ = -1;
+        curve_point_snapshot_ = {};
+        view.notify_document_modified();
+        return;
+    }
 
     if (rubber_banding_) {
         rubber_banding_ = false;
