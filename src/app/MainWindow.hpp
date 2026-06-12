@@ -53,6 +53,8 @@ private:
     void ungroup_selected();
     void make_block_from_selected();
     void explode_selected_block();
+    void define_block_from_selected();
+    void insert_block_instance();
     void subtract_selected();
     void union_selected();
     void intersect_selected();

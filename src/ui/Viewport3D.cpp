@@ -459,6 +459,33 @@ void Viewport3D::rebuild_mesh() {
                           c.roughness, c.metallic, static_cast<float>(c.pattern));
         }
     }
+    for (const auto& [id, inst] : document_.block_instances()) {
+        const auto* def = document_.find_block_def(inst.definition_id);
+        if (!def) continue;
+        for (const auto& local_b : def->boxes) {
+            const auto b = inst.world_box(local_b);
+            const QVector3D center(static_cast<float>(b.position.x()),
+                                   static_cast<float>(b.position.y()), 0.0f);
+            push_oriented_box(verts, center,
+                              static_cast<float>(b.size_xy.x() * 0.5),
+                              static_cast<float>(b.size_xy.y() * 0.5),
+                              static_cast<float>(b.base_z),
+                              static_cast<float>(b.base_z + b.height),
+                              static_cast<float>(b.rotation_z),
+                              QVector3D(b.color.r, b.color.g, b.color.b),
+                              b.roughness, b.metallic, static_cast<float>(b.pattern));
+        }
+        for (const auto& local_c : def->cylinders) {
+            const auto c = inst.world_cylinder(local_c);
+            const QVector3D center(static_cast<float>(c.position.x()),
+                                   static_cast<float>(c.position.y()), 0.0f);
+            push_cylinder(verts, center, static_cast<float>(c.radius),
+                          static_cast<float>(c.base_z),
+                          static_cast<float>(c.base_z + c.height),
+                          QVector3D(c.color.r, c.color.g, c.color.b),
+                          c.roughness, c.metallic, static_cast<float>(c.pattern));
+        }
+    }
     for (const auto& [id, surf] : document_.surfaces()) {
         const auto tess = surf.tessellate(24, 24);
         const QVector3D color(surf.color.r, surf.color.g, surf.color.b);

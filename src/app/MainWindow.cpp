@@ -5,6 +5,8 @@
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenuBar>
@@ -35,6 +37,7 @@
 #include <QKeySequence>
 
 #include "command/BlockCommands.hpp"
+#include "command/BlockInstanceCommands.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
@@ -241,6 +244,14 @@ void MainWindow::build_menu() {
     auto* explode_a = edit_menu->addAction("E&xplode Block");
     explode_a->setShortcut(QKeySequence("Ctrl+Alt+X"));
     connect(explode_a, &QAction::triggered, this, &MainWindow::explode_selected_block);
+
+    auto* define_block_a = edit_menu->addAction("&Define Block from Selection");
+    define_block_a->setShortcut(QKeySequence("Ctrl+Alt+D"));
+    connect(define_block_a, &QAction::triggered, this, &MainWindow::define_block_from_selected);
+
+    auto* insert_inst_a = edit_menu->addAction("&Insert Block Instance...");
+    insert_inst_a->setShortcut(QKeySequence("Ctrl+Alt+I"));
+    connect(insert_inst_a, &QAction::triggered, this, &MainWindow::insert_block_instance);
 
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (Top)");
@@ -817,6 +828,111 @@ void MainWindow::make_block_from_selected() {
     statusBar()->showMessage(QString("Packed %1 entities into a Block").arg(count));
 }
 
+void MainWindow::define_block_from_selected() {
+    const auto selections = plan_view_->selections();
+    if (selections.empty()) {
+        statusBar()->showMessage("Define Block: select boxes / cylinders first");
+        return;
+    }
+
+    std::vector<cadino::core::Box> boxes;
+    std::vector<cadino::core::Cylinder> cylinders;
+    double sx = 0.0, sy = 0.0;
+    int count = 0;
+    for (const auto& sel : selections) {
+        if (sel.kind == cadino::ui::SelectKind::Box) {
+            if (const auto* b = document_.find_box(sel.id)) {
+                boxes.push_back(*b);
+                sx += b->position.x();
+                sy += b->position.y();
+                ++count;
+            }
+        } else if (sel.kind == cadino::ui::SelectKind::Cylinder) {
+            if (const auto* c = document_.find_cylinder(sel.id)) {
+                cylinders.push_back(*c);
+                sx += c->position.x();
+                sy += c->position.y();
+                ++count;
+            }
+        }
+    }
+    if (count == 0) {
+        statusBar()->showMessage("Define Block: select boxes or cylinders only");
+        return;
+    }
+
+    bool ok = false;
+    QString name = QInputDialog::getText(this, "Define Block",
+                                         "Definition name:", QLineEdit::Normal,
+                                         "Furniture", &ok);
+    if (!ok || name.isEmpty()) return;
+
+    const double cx = sx / count;
+    const double cy = sy / count;
+    cadino::core::BlockDefinition def;
+    def.name = name.toStdString();
+    for (auto b : boxes) {
+        b.id = {};
+        b.position = {b.position.x() - cx, b.position.y() - cy};
+        def.boxes.push_back(std::move(b));
+    }
+    for (auto c : cylinders) {
+        c.id = {};
+        c.position = {c.position.x() - cx, c.position.y() - cy};
+        def.cylinders.push_back(std::move(c));
+    }
+
+    auto def_cmd = std::make_unique<cadino::core::AddBlockDefinitionCommand>(std::move(def));
+    const auto* def_cmd_ptr = def_cmd.get();
+    stack_.execute(std::move(def_cmd));
+    const auto def_id = def_cmd_ptr->entity_id();
+
+    // Remove originals and drop a first instance at the centroid.
+    for (const auto& sel : selections) {
+        if (sel.kind == cadino::ui::SelectKind::Box) {
+            stack_.execute(std::make_unique<cadino::core::RemoveBoxCommand>(sel.id));
+        } else if (sel.kind == cadino::ui::SelectKind::Cylinder) {
+            stack_.execute(std::make_unique<cadino::core::RemoveCylinderCommand>(sel.id));
+        }
+    }
+
+    cadino::core::BlockInstance inst;
+    inst.definition_id = def_id;
+    inst.position = {cx, cy};
+    stack_.execute(std::make_unique<cadino::core::AddBlockInstanceCommand>(std::move(inst)));
+
+    plan_view_->clear_selection();
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Defined Block '%1' (%2 children) and placed one instance")
+                                 .arg(name).arg(count));
+}
+
+void MainWindow::insert_block_instance() {
+    if (document_.block_defs().empty()) {
+        statusBar()->showMessage("No Block definitions yet — use 'Define Block from Selection' first");
+        return;
+    }
+    QStringList items;
+    std::vector<cadino::core::EntityId> ids;
+    for (const auto& [id, def] : document_.block_defs()) {
+        items << QString::fromStdString(def.name) + QString(" (id=%1)").arg(id.value);
+        ids.push_back(id);
+    }
+    bool ok = false;
+    const QString picked = QInputDialog::getItem(this, "Insert Block Instance",
+                                                 "Definition:", items, 0, false, &ok);
+    if (!ok) return;
+    const int idx = items.indexOf(picked);
+    if (idx < 0) return;
+
+    cadino::core::BlockInstance inst;
+    inst.definition_id = ids[static_cast<std::size_t>(idx)];
+    inst.position = {0.0, 0.0};
+    stack_.execute(std::make_unique<cadino::core::AddBlockInstanceCommand>(std::move(inst)));
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage("Inserted block instance at origin — drag with the Select tool");
+}
+
 void MainWindow::explode_selected_block() {
     const auto selections = plan_view_->selections();
     if (selections.empty()) {
@@ -920,6 +1036,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::NurbsSurface:
                 stack_.execute(std::make_unique<cadino::core::RemoveNurbsSurfaceCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::BlockInstance:
+                stack_.execute(std::make_unique<cadino::core::RemoveBlockInstanceCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

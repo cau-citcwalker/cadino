@@ -149,6 +149,108 @@ cadino::core::Block block_from(const QJsonObject& o) {
     return bl;
 }
 
+QJsonObject box_to_json_local(const cadino::core::Box& b) {
+    QJsonObject bo;
+    bo["position"] = vec2_array(b.position.x(), b.position.y());
+    bo["size_xy"] = vec2_array(b.size_xy.x(), b.size_xy.y());
+    bo["height"] = b.height;
+    bo["base_z"] = b.base_z;
+    bo["rotation_z"] = b.rotation_z;
+    bo["color"] = color_array(b.color);
+    bo["roughness"] = b.roughness;
+    bo["metallic"] = b.metallic;
+    bo["pattern"] = b.pattern;
+    return bo;
+}
+
+QJsonObject cyl_to_json_local(const cadino::core::Cylinder& c) {
+    QJsonObject co;
+    co["position"] = vec2_array(c.position.x(), c.position.y());
+    co["radius"] = c.radius;
+    co["height"] = c.height;
+    co["base_z"] = c.base_z;
+    co["color"] = color_array(c.color);
+    co["roughness"] = c.roughness;
+    co["metallic"] = c.metallic;
+    co["pattern"] = c.pattern;
+    return co;
+}
+
+cadino::core::Box box_local_from(const QJsonObject& bo) {
+    cadino::core::Box b;
+    const auto pp = bo["position"].toArray();
+    const auto sz = bo["size_xy"].toArray();
+    if (pp.size() >= 2) b.position = {pp[0].toDouble(), pp[1].toDouble()};
+    if (sz.size() >= 2) b.size_xy = {sz[0].toDouble(), sz[1].toDouble()};
+    b.height = bo["height"].toDouble(b.height);
+    b.base_z = bo["base_z"].toDouble(b.base_z);
+    b.rotation_z = bo["rotation_z"].toDouble(b.rotation_z);
+    if (bo.contains("color")) b.color = color_from(bo["color"].toArray());
+    b.roughness = static_cast<float>(bo["roughness"].toDouble(b.roughness));
+    b.metallic = static_cast<float>(bo["metallic"].toDouble(b.metallic));
+    b.pattern = bo["pattern"].toInt(b.pattern);
+    return b;
+}
+
+cadino::core::Cylinder cyl_local_from(const QJsonObject& co) {
+    cadino::core::Cylinder c;
+    const auto pp = co["position"].toArray();
+    if (pp.size() >= 2) c.position = {pp[0].toDouble(), pp[1].toDouble()};
+    c.radius = co["radius"].toDouble(c.radius);
+    c.height = co["height"].toDouble(c.height);
+    c.base_z = co["base_z"].toDouble(c.base_z);
+    if (co.contains("color")) c.color = color_from(co["color"].toArray());
+    c.roughness = static_cast<float>(co["roughness"].toDouble(c.roughness));
+    c.metallic = static_cast<float>(co["metallic"].toDouble(c.metallic));
+    c.pattern = co["pattern"].toInt(c.pattern);
+    return c;
+}
+
+QJsonObject to_json(const cadino::core::BlockDefinition& def) {
+    QJsonObject o;
+    o["id"] = qint64(def.id.value);
+    o["name"] = QString::fromStdString(def.name);
+    QJsonArray bs;
+    for (const auto& b : def.boxes) bs.append(box_to_json_local(b));
+    o["boxes"] = bs;
+    QJsonArray cs;
+    for (const auto& c : def.cylinders) cs.append(cyl_to_json_local(c));
+    o["cylinders"] = cs;
+    return o;
+}
+
+cadino::core::BlockDefinition block_def_from(const QJsonObject& o) {
+    cadino::core::BlockDefinition def;
+    def.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    def.name = o["name"].toString().toStdString();
+    for (const auto& v : o["boxes"].toArray()) def.boxes.push_back(box_local_from(v.toObject()));
+    for (const auto& v : o["cylinders"].toArray()) def.cylinders.push_back(cyl_local_from(v.toObject()));
+    return def;
+}
+
+QJsonObject to_json(const cadino::core::BlockInstance& inst) {
+    QJsonObject o;
+    o["id"] = qint64(inst.id.value);
+    o["group_id"] = qint64(inst.group_id.value);
+    o["definition_id"] = qint64(inst.definition_id.value);
+    o["position"] = vec2_array(inst.position.x(), inst.position.y());
+    o["rotation_z"] = inst.rotation_z;
+    o["base_z"] = inst.base_z;
+    return o;
+}
+
+cadino::core::BlockInstance block_instance_from(const QJsonObject& o) {
+    cadino::core::BlockInstance inst;
+    inst.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    inst.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    inst.definition_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["definition_id"].toVariant().toULongLong())};
+    const auto p = o["position"].toArray();
+    if (p.size() >= 2) inst.position = {p[0].toDouble(), p[1].toDouble()};
+    inst.rotation_z = o["rotation_z"].toDouble(inst.rotation_z);
+    inst.base_z = o["base_z"].toDouble(inst.base_z);
+    return inst;
+}
+
 QJsonObject to_json(const cadino::core::NurbsSurface& ns) {
     QJsonObject o;
     o["id"] = qint64(ns.id.value);
@@ -403,6 +505,14 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     for (const auto& [id, s] : doc.surfaces()) surfaces_json.append(to_json(s));
     root["surfaces"] = surfaces_json;
 
+    QJsonArray block_defs_json;
+    for (const auto& [id, d] : doc.block_defs()) block_defs_json.append(to_json(d));
+    root["block_defs"] = block_defs_json;
+
+    QJsonArray block_instances_json;
+    for (const auto& [id, i] : doc.block_instances()) block_instances_json.append(to_json(i));
+    root["block_instances"] = block_instances_json;
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         if (error) *error = file.errorString();
@@ -481,6 +591,16 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto s = surface_from(v.toObject());
         max_id = std::max(max_id, s.id.value);
         loaded.add_surface(std::move(s));
+    }
+    for (const auto& v : root["block_defs"].toArray()) {
+        auto d = block_def_from(v.toObject());
+        max_id = std::max(max_id, d.id.value);
+        loaded.add_block_def(std::move(d));
+    }
+    for (const auto& v : root["block_instances"].toArray()) {
+        auto i = block_instance_from(v.toObject());
+        max_id = std::max(max_id, i.id.value);
+        loaded.add_block_instance(std::move(i));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

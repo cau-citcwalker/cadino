@@ -118,6 +118,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_doors_windows(p);
     draw_curves(p);
     draw_blocks(p);
+    draw_block_instances(p);
     draw_surfaces(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
@@ -338,6 +339,70 @@ void PlanView::draw_walls(QPainter& p) {
         poly << model_to_screen(p1) << model_to_screen(p2)
              << model_to_screen(p3) << model_to_screen(p4);
         p.drawPolygon(poly);
+    }
+}
+
+void PlanView::draw_block_instances(QPainter& p) {
+    QPen edge_pen(QColor(60, 60, 70));
+    edge_pen.setCosmetic(true);
+    edge_pen.setWidth(2);
+
+    for (const auto& [id, inst] : document_.block_instances()) {
+        const auto* def = document_.find_block_def(inst.definition_id);
+        if (!def) continue;
+        const bool selected = is_selected({id, SelectKind::BlockInstance});
+
+        for (const auto& local_b : def->boxes) {
+            const auto b = inst.world_box(local_b);
+            p.setPen(edge_pen);
+            p.setBrush(QColor::fromRgbF(b.color.r, b.color.g, b.color.b, 0.55f));
+            const double hx = b.size_xy.x() * 0.5;
+            const double hy = b.size_xy.y() * 0.5;
+            const double c = std::cos(b.rotation_z);
+            const double s = std::sin(b.rotation_z);
+            const auto rot = [&](double x, double y) {
+                return QPointF(b.position.x() + c * x - s * y,
+                               b.position.y() + s * x + c * y);
+            };
+            QPolygonF poly;
+            poly << model_to_screen(rot(-hx, -hy))
+                 << model_to_screen(rot( hx, -hy))
+                 << model_to_screen(rot( hx,  hy))
+                 << model_to_screen(rot(-hx,  hy));
+            p.drawPolygon(poly);
+        }
+        for (const auto& local_c : def->cylinders) {
+            const auto c = inst.world_cylinder(local_c);
+            p.setPen(edge_pen);
+            p.setBrush(QColor::fromRgbF(c.color.r, c.color.g, c.color.b, 0.55f));
+            const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
+            const double r_s = c.radius * zoom_;
+            p.drawEllipse(center_s, r_s, r_s);
+        }
+
+        const QPointF anchor = model_to_screen({inst.position.x(), inst.position.y()});
+        QPen marker_pen(selected ? QColor(60, 200, 140) : QColor(120, 200, 160),
+                        selected ? 3 : 1);
+        marker_pen.setCosmetic(true);
+        p.setPen(marker_pen);
+        p.setBrush(Qt::NoBrush);
+        const QRectF diamond(anchor.x() - 6, anchor.y() - 6, 12, 12);
+        QPolygonF diamondPoly;
+        diamondPoly << QPointF(anchor.x(), anchor.y() - 7)
+                    << QPointF(anchor.x() + 7, anchor.y())
+                    << QPointF(anchor.x(), anchor.y() + 7)
+                    << QPointF(anchor.x() - 7, anchor.y());
+        p.drawPolygon(diamondPoly);
+        (void)diamond;
+
+        if (!def->name.empty()) {
+            QFont font = p.font();
+            font.setBold(true);
+            p.setFont(font);
+            p.setPen(QColor(40, 80, 60));
+            p.drawText(anchor + QPointF(10, -10),
+                       QString::fromStdString(def->name));
+        }
     }
 }
 

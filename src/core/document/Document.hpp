@@ -3,6 +3,8 @@
 #include <unordered_map>
 
 #include "entity/Block.hpp"
+#include "entity/BlockDefinition.hpp"
+#include "entity/BlockInstance.hpp"
 #include "entity/Box.hpp"
 #include "entity/Cylinder.hpp"
 #include "entity/Door.hpp"
@@ -27,6 +29,8 @@ public:
     EntityId add_curve(NurbsCurve curve);
     EntityId add_block(Block block);
     EntityId add_surface(NurbsSurface surface);
+    EntityId add_block_def(BlockDefinition def);
+    EntityId add_block_instance(BlockInstance inst);
 
     [[nodiscard]] const Wall* find_wall(EntityId id) const;
     [[nodiscard]] Wall* find_wall(EntityId id);
@@ -48,6 +52,10 @@ public:
     [[nodiscard]] Block* find_block(EntityId id);
     [[nodiscard]] const NurbsSurface* find_surface(EntityId id) const;
     [[nodiscard]] NurbsSurface* find_surface(EntityId id);
+    [[nodiscard]] const BlockDefinition* find_block_def(EntityId id) const;
+    [[nodiscard]] BlockDefinition* find_block_def(EntityId id);
+    [[nodiscard]] const BlockInstance* find_block_instance(EntityId id) const;
+    [[nodiscard]] BlockInstance* find_block_instance(EntityId id);
 
     bool remove_wall(EntityId id);
     bool remove_door(EntityId id);
@@ -59,6 +67,8 @@ public:
     bool remove_curve(EntityId id);
     bool remove_block(EntityId id);
     bool remove_surface(EntityId id);
+    bool remove_block_def(EntityId id);
+    bool remove_block_instance(EntityId id);
 
     [[nodiscard]] const std::unordered_map<EntityId, Wall>& walls() const noexcept { return walls_; }
     [[nodiscard]] const std::unordered_map<EntityId, Door>& doors() const noexcept { return doors_; }
@@ -70,11 +80,13 @@ public:
     [[nodiscard]] const std::unordered_map<EntityId, NurbsCurve>& curves() const noexcept { return curves_; }
     [[nodiscard]] const std::unordered_map<EntityId, Block>& blocks() const noexcept { return blocks_; }
     [[nodiscard]] const std::unordered_map<EntityId, NurbsSurface>& surfaces() const noexcept { return surfaces_; }
+    [[nodiscard]] const std::unordered_map<EntityId, BlockDefinition>& block_defs() const noexcept { return block_defs_; }
+    [[nodiscard]] const std::unordered_map<EntityId, BlockInstance>& block_instances() const noexcept { return block_instances_; }
 
     [[nodiscard]] std::size_t entity_count() const noexcept {
         return walls_.size() + doors_.size() + windows_.size() + slabs_.size() +
                boxes_.size() + cylinders_.size() + meshes_.size() + curves_.size() +
-               blocks_.size() + surfaces_.size();
+               blocks_.size() + surfaces_.size() + block_instances_.size();
     }
 
 private:
@@ -88,6 +100,8 @@ private:
     std::unordered_map<EntityId, NurbsCurve> curves_;
     std::unordered_map<EntityId, Block> blocks_;
     std::unordered_map<EntityId, NurbsSurface> surfaces_;
+    std::unordered_map<EntityId, BlockDefinition> block_defs_;
+    std::unordered_map<EntityId, BlockInstance> block_instances_;
 };
 
 }  // namespace cadino::core

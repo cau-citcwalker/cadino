@@ -11,6 +11,7 @@ add_library(cadino_core STATIC
     command/NurbsCurveCommands.cpp
     command/NurbsSurfaceCommands.cpp
     command/BlockCommands.cpp
+    command/BlockInstanceCommands.cpp
 )
 
 target_include_directories(cadino_core
