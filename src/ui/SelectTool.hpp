@@ -13,6 +13,7 @@
 #include "entity/Cylinder.hpp"
 #include "entity/EntityId.hpp"
 #include "entity/NurbsCurve.hpp"
+#include "entity/NurbsSurface.hpp"
 #include "entity/Wall.hpp"
 
 namespace cadino::ui {
@@ -36,6 +37,10 @@ private:
     cadino::core::EntityId curve_point_id_{};
     int curve_point_index_{-1};
     cadino::core::NurbsCurve curve_point_snapshot_{};
+
+    cadino::core::EntityId surface_point_id_{};
+    int surface_point_index_{-1};
+    cadino::core::NurbsSurface surface_point_snapshot_{};
 
     bool rubber_banding_{false};
     QPointF rubber_start_{};

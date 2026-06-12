@@ -79,6 +79,7 @@ private:
     void draw_doors_windows(QPainter& p);
     void draw_curves(QPainter& p);
     void draw_blocks(QPainter& p);
+    void draw_surfaces(QPainter& p);
     void draw_snap_marker(QPainter& p);
     QPointF apply_snap(QPointF model_pos);
 

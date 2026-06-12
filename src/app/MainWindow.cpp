@@ -28,6 +28,7 @@
 #include "PropertiesPanel.hpp"
 #include "SelectTool.hpp"
 #include "NurbsCurveTool.hpp"
+#include "NurbsSurfaceTool.hpp"
 #include "SlabTool.hpp"
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
@@ -37,6 +38,7 @@
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
+#include "command/NurbsSurfaceCommands.hpp"
 
 #ifdef CADINO_HAS_OPENNURBS
 #include "RhinoIO.hpp"
@@ -342,6 +344,12 @@ void MainWindow::build_toolbar() {
     group->addAction(curve_action_);
     connect(curve_action_, &QAction::triggered, this, &MainWindow::activate_curve_tool);
 
+    surface_action_ = tools->addAction("NURBS Surface");
+    surface_action_->setCheckable(true);
+    surface_action_->setShortcut(QKeySequence("F"));
+    group->addAction(surface_action_);
+    connect(surface_action_, &QAction::triggered, this, &MainWindow::activate_surface_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -415,6 +423,13 @@ void MainWindow::activate_curve_tool() {
     if (curve_action_) curve_action_->setChecked(true);
     statusBar()->showMessage(
         "NURBS curve — left-click adds control points, right-click to finish (Esc cancels)");
+}
+
+void MainWindow::activate_surface_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::NurbsSurfaceTool>());
+    if (surface_action_) surface_action_->setChecked(true);
+    statusBar()->showMessage(
+        "NURBS surface — click two corners to drop a 4x4 grid at 1500 mm (Esc cancels)");
 }
 
 void MainWindow::activate_slab_tool() {
@@ -902,6 +917,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::Block:
                 stack_.execute(std::make_unique<cadino::core::RemoveBlockCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::NurbsSurface:
+                stack_.execute(std::make_unique<cadino::core::RemoveNurbsSurfaceCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

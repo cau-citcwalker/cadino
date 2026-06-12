@@ -459,6 +459,30 @@ void Viewport3D::rebuild_mesh() {
                           c.roughness, c.metallic, static_cast<float>(c.pattern));
         }
     }
+    for (const auto& [id, surf] : document_.surfaces()) {
+        const auto tess = surf.tessellate(24, 24);
+        const QVector3D color(surf.color.r, surf.color.g, surf.color.b);
+        const float rough = surf.roughness;
+        const float metal = surf.metallic;
+        const float pat = static_cast<float>(surf.pattern);
+        for (std::size_t i = 0; i + 2 < tess.indices.size(); i += 3) {
+            const auto& p0 = tess.positions[tess.indices[i]];
+            const auto& p1 = tess.positions[tess.indices[i + 1]];
+            const auto& p2 = tess.positions[tess.indices[i + 2]];
+            const auto& n0 = tess.normals[tess.indices[i]];
+            const auto& n1 = tess.normals[tess.indices[i + 1]];
+            const auto& n2 = tess.normals[tess.indices[i + 2]];
+            verts.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
+                             color.x(), color.y(), color.z(), rough, metal,
+                             p0.x(), p0.y(), pat});
+            verts.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
+                             color.x(), color.y(), color.z(), rough, metal,
+                             p1.x(), p1.y(), pat});
+            verts.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
+                             color.x(), color.y(), color.z(), rough, metal,
+                             p2.x(), p2.y(), pat});
+        }
+    }
     for (const auto& [id, m] : document_.meshes()) {
         const QVector3D color(m.color.r, m.color.g, m.color.b);
         const float rough = m.roughness;

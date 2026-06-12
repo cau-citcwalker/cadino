@@ -149,6 +149,49 @@ cadino::core::Block block_from(const QJsonObject& o) {
     return bl;
 }
 
+QJsonObject to_json(const cadino::core::NurbsSurface& ns) {
+    QJsonObject o;
+    o["id"] = qint64(ns.id.value);
+    o["group_id"] = qint64(ns.group_id.value);
+    o["degree_u"] = ns.degree_u;
+    o["degree_v"] = ns.degree_v;
+    o["rows"] = ns.rows;
+    o["cols"] = ns.cols;
+    o["color"] = color_array(ns.color);
+    o["roughness"] = ns.roughness;
+    o["metallic"] = ns.metallic;
+    o["pattern"] = ns.pattern;
+    QJsonArray pts;
+    for (const auto& p : ns.control_points) {
+        QJsonArray a;
+        a << p.x() << p.y() << p.z();
+        pts.append(a);
+    }
+    o["control_points"] = pts;
+    return o;
+}
+
+cadino::core::NurbsSurface surface_from(const QJsonObject& o) {
+    cadino::core::NurbsSurface ns;
+    ns.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    ns.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    ns.degree_u = o["degree_u"].toInt(ns.degree_u);
+    ns.degree_v = o["degree_v"].toInt(ns.degree_v);
+    ns.rows = o["rows"].toInt(0);
+    ns.cols = o["cols"].toInt(0);
+    if (o.contains("color")) ns.color = color_from(o["color"].toArray());
+    ns.roughness = static_cast<float>(o["roughness"].toDouble(ns.roughness));
+    ns.metallic = static_cast<float>(o["metallic"].toDouble(ns.metallic));
+    ns.pattern = o["pattern"].toInt(ns.pattern);
+    for (const auto& v : o["control_points"].toArray()) {
+        const auto a = v.toArray();
+        if (a.size() >= 3) {
+            ns.control_points.emplace_back(a[0].toDouble(), a[1].toDouble(), a[2].toDouble());
+        }
+    }
+    return ns;
+}
+
 QJsonObject to_json(const cadino::core::NurbsCurve& nc) {
     QJsonObject o;
     o["id"] = qint64(nc.id.value);
@@ -356,6 +399,10 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     for (const auto& [id, b] : doc.blocks()) blocks_json.append(to_json(b));
     root["blocks"] = blocks_json;
 
+    QJsonArray surfaces_json;
+    for (const auto& [id, s] : doc.surfaces()) surfaces_json.append(to_json(s));
+    root["surfaces"] = surfaces_json;
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         if (error) *error = file.errorString();
@@ -429,6 +476,11 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto bl = block_from(v.toObject());
         max_id = std::max(max_id, bl.id.value);
         loaded.add_block(std::move(bl));
+    }
+    for (const auto& v : root["surfaces"].toArray()) {
+        auto s = surface_from(v.toObject());
+        max_id = std::max(max_id, s.id.value);
+        loaded.add_surface(std::move(s));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

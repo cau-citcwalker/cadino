@@ -118,6 +118,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_doors_windows(p);
     draw_curves(p);
     draw_blocks(p);
+    draw_surfaces(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -337,6 +338,58 @@ void PlanView::draw_walls(QPainter& p) {
         poly << model_to_screen(p1) << model_to_screen(p2)
              << model_to_screen(p3) << model_to_screen(p4);
         p.drawPolygon(poly);
+    }
+}
+
+void PlanView::draw_surfaces(QPainter& p) {
+    for (const auto& [id, surf] : document_.surfaces()) {
+        if (surf.rows < 2 || surf.cols < 2) continue;
+        const bool selected = is_selected({id, SelectKind::NurbsSurface});
+
+        QPen edge_pen(QColor::fromRgbF(surf.color.r, surf.color.g, surf.color.b),
+                      selected ? 2 : 1, Qt::DashLine);
+        edge_pen.setCosmetic(true);
+        p.setPen(edge_pen);
+        p.setBrush(QColor::fromRgbF(surf.color.r, surf.color.g, surf.color.b, 0.25f));
+
+        QPolygonF poly;
+        const auto& cp00 = surf.at(0, 0);
+        const auto& cp01 = surf.at(0, surf.cols - 1);
+        const auto& cp10 = surf.at(surf.rows - 1, 0);
+        const auto& cp11 = surf.at(surf.rows - 1, surf.cols - 1);
+        poly << model_to_screen({cp00.x(), cp00.y()})
+             << model_to_screen({cp01.x(), cp01.y()})
+             << model_to_screen({cp11.x(), cp11.y()})
+             << model_to_screen({cp10.x(), cp10.y()});
+        p.drawPolygon(poly);
+
+        if (selected) {
+            QPen grid_pen(QColor(150, 150, 160, 180), 1, Qt::DotLine);
+            grid_pen.setCosmetic(true);
+            p.setPen(grid_pen);
+            p.setBrush(Qt::NoBrush);
+            for (int r = 0; r < surf.rows; ++r) {
+                QPolygonF row;
+                for (int c = 0; c < surf.cols; ++c) {
+                    const auto& cp = surf.at(r, c);
+                    row << model_to_screen({cp.x(), cp.y()});
+                }
+                p.drawPolyline(row);
+            }
+            for (int c = 0; c < surf.cols; ++c) {
+                QPolygonF col;
+                for (int r = 0; r < surf.rows; ++r) {
+                    const auto& cp = surf.at(r, c);
+                    col << model_to_screen({cp.x(), cp.y()});
+                }
+                p.drawPolyline(col);
+            }
+            p.setBrush(QColor(220, 170, 60));
+            p.setPen(Qt::NoPen);
+            for (const auto& cp : surf.control_points) {
+                p.drawEllipse(model_to_screen({cp.x(), cp.y()}), 4, 4);
+            }
+        }
     }
 }
 

@@ -15,6 +15,7 @@
 #include "command/CommandStack.hpp"
 #include "command/CylinderCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
+#include "command/NurbsSurfaceCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
 
@@ -116,6 +117,24 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
             }
         }
     }
+    for (const auto& [id, surf] : doc.surfaces()) {
+        if (surf.rows < 2 || surf.cols < 2) continue;
+        // Quick axis-aligned bbox of the control polygon footprint.
+        double minx = surf.control_points[0].x();
+        double miny = surf.control_points[0].y();
+        double maxx = minx, maxy = miny;
+        for (const auto& cp : surf.control_points) {
+            minx = std::min(minx, cp.x()); miny = std::min(miny, cp.y());
+            maxx = std::max(maxx, cp.x()); maxy = std::max(maxy, cp.y());
+        }
+        if (model_pos.x() >= minx && model_pos.x() <= maxx &&
+            model_pos.y() >= miny && model_pos.y() <= maxy) {
+            if (best_dist > 0) {
+                best_dist = 0;
+                best = {id, SelectKind::NurbsSurface};
+            }
+        }
+    }
     for (const auto& [id, block] : doc.blocks()) {
         bool hit = false;
         for (const auto& local_b : block.boxes) {
@@ -191,6 +210,30 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
         }
     }
 
+    if (view.selections().size() == 1 &&
+        view.selections().front().kind == SelectKind::NurbsSurface) {
+        const auto sel = view.selections().front();
+        if (const auto* surf = doc.find_surface(sel.id)) {
+            int hit_idx = -1;
+            double best = pick_radius * 1.2;
+            for (std::size_t i = 0; i < surf->control_points.size(); ++i) {
+                const double d = std::hypot(
+                    model_pos.x() - surf->control_points[i].x(),
+                    model_pos.y() - surf->control_points[i].y());
+                if (d <= best) {
+                    best = d;
+                    hit_idx = static_cast<int>(i);
+                }
+            }
+            if (hit_idx >= 0) {
+                surface_point_id_ = sel.id;
+                surface_point_index_ = hit_idx;
+                surface_point_snapshot_ = *surf;
+                return;
+            }
+        }
+    }
+
     const Selection hit = pick_at(doc, model_pos, pick_radius);
     const bool shift = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
 
@@ -253,6 +296,19 @@ void SelectTool::on_move(PlanView& view, QPointF model_pos) {
         }
         return;
     }
+    if (surface_point_index_ >= 0) {
+        auto& doc = view.document();
+        if (auto* surf = doc.find_surface(surface_point_id_)) {
+            if (surface_point_index_ < static_cast<int>(surf->control_points.size())) {
+                const double old_z =
+                    surf->control_points[static_cast<std::size_t>(surface_point_index_)].z();
+                surf->control_points[static_cast<std::size_t>(surface_point_index_)] = {
+                    model_pos.x(), model_pos.y(), old_z};
+                view.update();
+            }
+        }
+        return;
+    }
     if (rubber_banding_) {
         rubber_current_ = model_pos;
         view.update();
@@ -308,6 +364,21 @@ void SelectTool::on_release(PlanView& view, QPointF model_pos, Qt::MouseButton b
         curve_point_id_ = {};
         curve_point_index_ = -1;
         curve_point_snapshot_ = {};
+        view.notify_document_modified();
+        return;
+    }
+    if (surface_point_index_ >= 0) {
+        auto& doc = view.document();
+        if (auto* surf = doc.find_surface(surface_point_id_)) {
+            cadino::core::NurbsSurface after = *surf;
+            *surf = surface_point_snapshot_;
+            view.command_stack().execute(
+                std::make_unique<cadino::core::ModifyNurbsSurfaceCommand>(
+                    surface_point_id_, std::move(after)));
+        }
+        surface_point_id_ = {};
+        surface_point_index_ = -1;
+        surface_point_snapshot_ = {};
         view.notify_document_modified();
         return;
     }
