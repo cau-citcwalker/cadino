@@ -11,9 +11,12 @@
 #include <QVBoxLayout>
 
 #include "PlanView.hpp"
+#include "command/BlockCommands.hpp"
+#include "command/BlockInstanceCommands.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
 #include "command/CylinderCommands.hpp"
+#include "command/NurbsCurveCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
 
@@ -76,6 +79,24 @@ void PropertiesPanel::refresh() {
             return;
         }
         build_for_cylinder();
+    } else if (current_.kind == SelectKind::NurbsCurve) {
+        if (!document_.find_curve(current_.id)) {
+            show_empty("Curve no longer exists");
+            return;
+        }
+        build_for_curve();
+    } else if (current_.kind == SelectKind::Block) {
+        if (!document_.find_block(current_.id)) {
+            show_empty("Block no longer exists");
+            return;
+        }
+        build_for_block();
+    } else if (current_.kind == SelectKind::BlockInstance) {
+        if (!document_.find_block_instance(current_.id)) {
+            show_empty("Block instance no longer exists");
+            return;
+        }
+        build_for_block_instance();
     }
 }
 
@@ -453,6 +474,185 @@ void PropertiesPanel::commit_box_edit() {
     }
 
     stack_.execute(std::make_unique<cadino::core::ModifyBoxCommand>(current_.id, after));
+    view_.notify_document_modified();
+}
+
+void PropertiesPanel::build_for_curve() {
+    const auto* c = document_.find_curve(current_.id);
+    if (!c) {
+        show_empty("Curve not found");
+        return;
+    }
+    suppress_commit_ = true;
+    clear_form();
+    empty_label_->setVisible(false);
+    title_->setText("NURBS Curve");
+
+    auto* degree = new QDoubleSpinBox(this);
+    degree->setRange(1, 5);
+    degree->setDecimals(0);
+    degree->setSingleStep(1);
+    degree->setValue(c->degree);
+    degree->setKeyboardTracking(false);
+
+    auto* line_width = new QDoubleSpinBox(this);
+    line_width->setRange(0.5, 10.0);
+    line_width->setDecimals(1);
+    line_width->setSingleStep(0.5);
+    line_width->setValue(c->line_width);
+    line_width->setKeyboardTracking(false);
+
+    color_button_ = make_color_button(c->color.r, c->color.g, c->color.b);
+
+    form_->addRow("Degree", degree);
+    form_->addRow("Line width", line_width);
+    form_->addRow("Color", color_button_);
+    form_->addRow("Control points",
+                  new QLabel(QString::number(c->control_points.size()), this));
+
+    fields_ = {degree, line_width};
+    for (auto* field : fields_) {
+        connect(field, &QDoubleSpinBox::editingFinished, this,
+                &PropertiesPanel::commit_curve_edit);
+    }
+    suppress_commit_ = false;
+}
+
+void PropertiesPanel::commit_curve_edit() {
+    if (suppress_commit_ || !current_.valid() || fields_.size() != 2) return;
+    const auto* c = document_.find_curve(current_.id);
+    if (!c) return;
+
+    cadino::core::NurbsCurve after = *c;
+    after.degree = static_cast<int>(fields_[0]->value());
+    after.line_width = static_cast<float>(fields_[1]->value());
+    after.color = current_color_;
+
+    if (after.degree == c->degree && after.line_width == c->line_width &&
+        after.color == c->color) {
+        return;
+    }
+    stack_.execute(std::make_unique<cadino::core::ModifyNurbsCurveCommand>(current_.id, after));
+    view_.notify_document_modified();
+}
+
+void PropertiesPanel::build_for_block() {
+    const auto* bl = document_.find_block(current_.id);
+    if (!bl) {
+        show_empty("Block not found");
+        return;
+    }
+    suppress_commit_ = true;
+    clear_form();
+    empty_label_->setVisible(false);
+    title_->setText("Block");
+
+    auto* pos_x = make_mm_field(bl->position.x());
+    auto* pos_y = make_mm_field(bl->position.y());
+    auto* base_z = make_mm_field(bl->base_z);
+    auto* rot = new QDoubleSpinBox(this);
+    rot->setRange(-360.0, 360.0);
+    rot->setDecimals(1);
+    rot->setSingleStep(5.0);
+    rot->setSuffix(" deg");
+    rot->setValue(bl->rotation_z * 180.0 / 3.14159265358979323846);
+    rot->setKeyboardTracking(false);
+
+    form_->addRow("Name",
+                  new QLabel(QString::fromStdString(bl->name), this));
+    form_->addRow("Position X", pos_x);
+    form_->addRow("Position Y", pos_y);
+    form_->addRow("Base Z", base_z);
+    form_->addRow("Rotation Z", rot);
+    form_->addRow("Boxes",
+                  new QLabel(QString::number(bl->boxes.size()), this));
+    form_->addRow("Cylinders",
+                  new QLabel(QString::number(bl->cylinders.size()), this));
+
+    fields_ = {pos_x, pos_y, base_z, rot};
+    for (auto* field : fields_) {
+        connect(field, &QDoubleSpinBox::editingFinished, this,
+                &PropertiesPanel::commit_block_edit);
+    }
+    suppress_commit_ = false;
+}
+
+void PropertiesPanel::commit_block_edit() {
+    if (suppress_commit_ || !current_.valid() || fields_.size() != 4) return;
+    const auto* bl = document_.find_block(current_.id);
+    if (!bl) return;
+
+    cadino::core::Block after = *bl;
+    after.position.x() = fields_[0]->value();
+    after.position.y() = fields_[1]->value();
+    after.base_z = fields_[2]->value();
+    after.rotation_z = fields_[3]->value() * 3.14159265358979323846 / 180.0;
+
+    if (after.position == bl->position && after.base_z == bl->base_z &&
+        after.rotation_z == bl->rotation_z) {
+        return;
+    }
+    stack_.execute(std::make_unique<cadino::core::ModifyBlockCommand>(current_.id, after));
+    view_.notify_document_modified();
+}
+
+void PropertiesPanel::build_for_block_instance() {
+    const auto* inst = document_.find_block_instance(current_.id);
+    if (!inst) {
+        show_empty("Block instance not found");
+        return;
+    }
+    suppress_commit_ = true;
+    clear_form();
+    empty_label_->setVisible(false);
+    title_->setText("Block Instance");
+
+    QString def_name = "(missing)";
+    if (const auto* def = document_.find_block_def(inst->definition_id)) {
+        def_name = QString::fromStdString(def->name);
+    }
+
+    auto* pos_x = make_mm_field(inst->position.x());
+    auto* pos_y = make_mm_field(inst->position.y());
+    auto* base_z = make_mm_field(inst->base_z);
+    auto* rot = new QDoubleSpinBox(this);
+    rot->setRange(-360.0, 360.0);
+    rot->setDecimals(1);
+    rot->setSingleStep(5.0);
+    rot->setSuffix(" deg");
+    rot->setValue(inst->rotation_z * 180.0 / 3.14159265358979323846);
+    rot->setKeyboardTracking(false);
+
+    form_->addRow("Definition", new QLabel(def_name, this));
+    form_->addRow("Position X", pos_x);
+    form_->addRow("Position Y", pos_y);
+    form_->addRow("Base Z", base_z);
+    form_->addRow("Rotation Z", rot);
+
+    fields_ = {pos_x, pos_y, base_z, rot};
+    for (auto* field : fields_) {
+        connect(field, &QDoubleSpinBox::editingFinished, this,
+                &PropertiesPanel::commit_block_instance_edit);
+    }
+    suppress_commit_ = false;
+}
+
+void PropertiesPanel::commit_block_instance_edit() {
+    if (suppress_commit_ || !current_.valid() || fields_.size() != 4) return;
+    const auto* inst = document_.find_block_instance(current_.id);
+    if (!inst) return;
+
+    cadino::core::BlockInstance after = *inst;
+    after.position.x() = fields_[0]->value();
+    after.position.y() = fields_[1]->value();
+    after.base_z = fields_[2]->value();
+    after.rotation_z = fields_[3]->value() * 3.14159265358979323846 / 180.0;
+
+    if (after.position == inst->position && after.base_z == inst->base_z &&
+        after.rotation_z == inst->rotation_z) {
+        return;
+    }
+    stack_.execute(std::make_unique<cadino::core::ModifyBlockInstanceCommand>(current_.id, after));
     view_.notify_document_modified();
 }
 
