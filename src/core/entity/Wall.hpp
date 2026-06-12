@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <Eigen/Core>
 
 #include "Color.hpp"
@@ -18,6 +20,7 @@ struct Wall {
     float roughness{0.85f};
     float metallic{0.0f};
     int pattern{0};
+    std::string texture_path;
 
     [[nodiscard]] double length() const noexcept;
     [[nodiscard]] Eigen::Vector2d direction() const noexcept;

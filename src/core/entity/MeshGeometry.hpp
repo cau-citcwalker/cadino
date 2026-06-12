@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -20,6 +21,7 @@ struct MeshGeometry {
     float roughness{0.6f};
     float metallic{0.0f};
     int pattern{0};
+    std::string texture_path;
 };
 
 }  // namespace cadino::core

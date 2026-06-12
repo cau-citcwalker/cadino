@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <numbers>
 #include <vector>
 
 #include <QApplication>
+#include <QImage>
 #include <QMouseEvent>
 #include <QWheelEvent>
 
@@ -66,6 +68,8 @@ out vec4 frag_color;
 uniform vec3 u_light_dir;
 uniform vec3 u_eye_pos;
 uniform int u_shadow_mode;
+uniform int u_has_texture;
+uniform sampler2D u_albedo;
 
 const float PI = 3.14159265358979323846;
 
@@ -160,6 +164,11 @@ void main() {
     vec3 sky_color = vec3(0.45, 0.55, 0.70) * 0.4;
 
     vec3 albedo = apply_pattern(v_color, v_pattern, v_uv);
+    if (u_has_texture == 1) {
+        // UV are world mm; tile so the image repeats every ~1 metre.
+        vec3 tex = texture(u_albedo, v_uv / 1000.0).rgb;
+        albedo *= tex;
+    }
 
     vec3 Lo = vec3(0.0);
     Lo += brdf_lobe(N, V, key_dir, key_color, albedo, roughness, metallic);
@@ -405,18 +414,24 @@ void Viewport3D::resizeGL(int w, int h) {
 }
 
 void Viewport3D::rebuild_mesh() {
-    std::vector<Vertex> verts;
-    verts.reserve(36 * document_.walls().size() + 6);
+    // Group vertices by texture path so we can issue one draw call per unique
+    // albedo. The empty string is the "no texture" bucket and stays first so
+    // the ground / shadow split in paintGL keeps working.
+    std::map<QString, std::vector<Vertex>> buckets;
+    auto& untex = buckets[QString()];
+    untex.reserve(36 * document_.walls().size() + 6);
 
-    push_ground_grid(verts, 20000.0f);
+    push_ground_grid(untex, 20000.0f);
     for (const auto& [id, w] : document_.walls()) {
-        push_wall_box(verts, w);
+        auto& b = buckets[QString::fromStdString(w.texture_path)];
+        push_wall_box(b, w);
     }
-    const std::size_t walls_end = verts.size();
+    const std::size_t walls_end = untex.size();
     for (const auto& [id, b] : document_.boxes()) {
+        auto& bucket = buckets[QString::fromStdString(b.texture_path)];
         const QVector3D center(static_cast<float>(b.position.x()),
                                static_cast<float>(b.position.y()), 0.0f);
-        push_oriented_box(verts, center,
+        push_oriented_box(bucket, center,
                           static_cast<float>(b.size_xy.x() * 0.5),
                           static_cast<float>(b.size_xy.y() * 0.5),
                           static_cast<float>(b.base_z),
@@ -426,9 +441,10 @@ void Viewport3D::rebuild_mesh() {
                           b.roughness, b.metallic, static_cast<float>(b.pattern));
     }
     for (const auto& [id, c] : document_.cylinders()) {
+        auto& bucket = buckets[QString::fromStdString(c.texture_path)];
         const QVector3D center(static_cast<float>(c.position.x()),
                                static_cast<float>(c.position.y()), 0.0f);
-        push_cylinder(verts, center, static_cast<float>(c.radius),
+        push_cylinder(bucket, center, static_cast<float>(c.radius),
                       static_cast<float>(c.base_z),
                       static_cast<float>(c.base_z + c.height),
                       QVector3D(c.color.r, c.color.g, c.color.b),
@@ -437,9 +453,10 @@ void Viewport3D::rebuild_mesh() {
     for (const auto& [id, block] : document_.blocks()) {
         for (const auto& local_b : block.boxes) {
             const auto b = block.world_box(local_b);
+            auto& bucket = buckets[QString::fromStdString(b.texture_path)];
             const QVector3D center(static_cast<float>(b.position.x()),
                                    static_cast<float>(b.position.y()), 0.0f);
-            push_oriented_box(verts, center,
+            push_oriented_box(bucket, center,
                               static_cast<float>(b.size_xy.x() * 0.5),
                               static_cast<float>(b.size_xy.y() * 0.5),
                               static_cast<float>(b.base_z),
@@ -450,9 +467,10 @@ void Viewport3D::rebuild_mesh() {
         }
         for (const auto& local_c : block.cylinders) {
             const auto c = block.world_cylinder(local_c);
+            auto& bucket = buckets[QString::fromStdString(c.texture_path)];
             const QVector3D center(static_cast<float>(c.position.x()),
                                    static_cast<float>(c.position.y()), 0.0f);
-            push_cylinder(verts, center, static_cast<float>(c.radius),
+            push_cylinder(bucket, center, static_cast<float>(c.radius),
                           static_cast<float>(c.base_z),
                           static_cast<float>(c.base_z + c.height),
                           QVector3D(c.color.r, c.color.g, c.color.b),
@@ -464,9 +482,10 @@ void Viewport3D::rebuild_mesh() {
         if (!def) continue;
         for (const auto& local_b : def->boxes) {
             const auto b = inst.world_box(local_b);
+            auto& bucket = buckets[QString::fromStdString(b.texture_path)];
             const QVector3D center(static_cast<float>(b.position.x()),
                                    static_cast<float>(b.position.y()), 0.0f);
-            push_oriented_box(verts, center,
+            push_oriented_box(bucket, center,
                               static_cast<float>(b.size_xy.x() * 0.5),
                               static_cast<float>(b.size_xy.y() * 0.5),
                               static_cast<float>(b.base_z),
@@ -477,9 +496,10 @@ void Viewport3D::rebuild_mesh() {
         }
         for (const auto& local_c : def->cylinders) {
             const auto c = inst.world_cylinder(local_c);
+            auto& bucket = buckets[QString::fromStdString(c.texture_path)];
             const QVector3D center(static_cast<float>(c.position.x()),
                                    static_cast<float>(c.position.y()), 0.0f);
-            push_cylinder(verts, center, static_cast<float>(c.radius),
+            push_cylinder(bucket, center, static_cast<float>(c.radius),
                           static_cast<float>(c.base_z),
                           static_cast<float>(c.base_z + c.height),
                           QVector3D(c.color.r, c.color.g, c.color.b),
@@ -487,6 +507,7 @@ void Viewport3D::rebuild_mesh() {
         }
     }
     for (const auto& [id, surf] : document_.surfaces()) {
+        auto& bucket = untex;
         const auto tess = surf.tessellate(24, 24);
         const QVector3D color(surf.color.r, surf.color.g, surf.color.b);
         const float rough = surf.roughness;
@@ -499,18 +520,19 @@ void Viewport3D::rebuild_mesh() {
             const auto& n0 = tess.normals[tess.indices[i]];
             const auto& n1 = tess.normals[tess.indices[i + 1]];
             const auto& n2 = tess.normals[tess.indices[i + 2]];
-            verts.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
-                             color.x(), color.y(), color.z(), rough, metal,
-                             p0.x(), p0.y(), pat});
-            verts.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
-                             color.x(), color.y(), color.z(), rough, metal,
-                             p1.x(), p1.y(), pat});
-            verts.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
-                             color.x(), color.y(), color.z(), rough, metal,
-                             p2.x(), p2.y(), pat});
+            bucket.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
+                              color.x(), color.y(), color.z(), rough, metal,
+                              p0.x(), p0.y(), pat});
+            bucket.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
+                              color.x(), color.y(), color.z(), rough, metal,
+                              p1.x(), p1.y(), pat});
+            bucket.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
+                              color.x(), color.y(), color.z(), rough, metal,
+                              p2.x(), p2.y(), pat});
         }
     }
     for (const auto& [id, m] : document_.meshes()) {
+        auto& bucket = buckets[QString::fromStdString(m.texture_path)];
         const QVector3D color(m.color.r, m.color.g, m.color.b);
         const float rough = m.roughness;
         const float metal = m.metallic;
@@ -522,15 +544,15 @@ void Viewport3D::rebuild_mesh() {
             const auto& n1 = i + 1 < m.normals.size() ? m.normals[m.indices[i + 1]] : Eigen::Vector3f::UnitZ();
             const auto& n2 = i + 2 < m.normals.size() ? m.normals[m.indices[i + 2]] : Eigen::Vector3f::UnitZ();
             const float pat = static_cast<float>(m.pattern);
-            verts.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
-                             color.x(), color.y(), color.z(), rough, metal,
-                             p0.x(), p0.y(), pat});
-            verts.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
-                             color.x(), color.y(), color.z(), rough, metal,
-                             p1.x(), p1.y(), pat});
-            verts.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
-                             color.x(), color.y(), color.z(), rough, metal,
-                             p2.x(), p2.y(), pat});
+            bucket.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
+                              color.x(), color.y(), color.z(), rough, metal,
+                              p0.x(), p0.y(), pat});
+            bucket.push_back({p1.x(), p1.y(), p1.z(), n1.x(), n1.y(), n1.z(),
+                              color.x(), color.y(), color.z(), rough, metal,
+                              p1.x(), p1.y(), pat});
+            bucket.push_back({p2.x(), p2.y(), p2.z(), n2.x(), n2.y(), n2.z(),
+                              color.x(), color.y(), color.z(), rough, metal,
+                              p2.x(), p2.y(), pat});
         }
     }
     for (const auto& [id, s] : document_.slabs()) {
@@ -542,7 +564,7 @@ void Viewport3D::rebuild_mesh() {
             maxx = std::max(maxx, v.x()); maxy = std::max(maxy, v.y());
         }
         const QVector3D center((minx + maxx) * 0.5f, (miny + maxy) * 0.5f, 0.0f);
-        push_oriented_box(verts, center,
+        push_oriented_box(untex, center,
                           static_cast<float>((maxx - minx) * 0.5),
                           static_cast<float>((maxy - miny) * 0.5),
                           static_cast<float>(s.level),
@@ -563,7 +585,7 @@ void Viewport3D::rebuild_mesh() {
         const QVector3D unit = dir / len;
         const float yaw = std::atan2(unit.y(), unit.x());
         const QVector3D center = a + unit * static_cast<float>(d.position_along);
-        push_oriented_box(verts, center,
+        push_oriented_box(untex, center,
                           static_cast<float>(d.width * 0.5),
                           static_cast<float>(w->thickness * 0.5),
                           static_cast<float>(d.sill_height),
@@ -584,7 +606,7 @@ void Viewport3D::rebuild_mesh() {
         const QVector3D unit = dir / len;
         const float yaw = std::atan2(unit.y(), unit.x());
         const QVector3D center = a + unit * static_cast<float>(win.position_along);
-        push_oriented_box(verts, center,
+        push_oriented_box(untex, center,
                           static_cast<float>(win.width * 0.5),
                           static_cast<float>(w->thickness * 0.5 + 1.0),
                           static_cast<float>(win.sill_height),
@@ -593,6 +615,30 @@ void Viewport3D::rebuild_mesh() {
                           QVector3D(0.65f, 0.80f, 0.90f), 0.10f, 0.0f);
     }
     walls_vertex_end_ = static_cast<int>(walls_end);
+
+    // Concatenate buckets into a single VBO and record draw groups. The empty
+    // "no texture" bucket goes first so it owns the ground plane that the
+    // planar shadow pass keys off of.
+    std::vector<Vertex> verts;
+    mesh_groups_.clear();
+    {
+        auto append = [&](const QString& path, const std::vector<Vertex>& chunk) {
+            if (chunk.empty()) return;
+            DrawGroup g;
+            g.offset = static_cast<int>(verts.size());
+            g.count = static_cast<int>(chunk.size());
+            g.texture_path = path;
+            mesh_groups_.push_back(g);
+            verts.insert(verts.end(), chunk.begin(), chunk.end());
+        };
+        // Untextured first.
+        auto it_empty = buckets.find(QString());
+        if (it_empty != buckets.end()) append(QString(), it_empty->second);
+        for (const auto& [path, chunk] : buckets) {
+            if (path.isEmpty()) continue;
+            append(path, chunk);
+        }
+    }
 
     vao_.bind();
     vbo_.bind();
@@ -718,7 +764,37 @@ void Viewport3D::paintGL() {
     QMatrix4x4 identity;
     program_->setUniformValue("u_model", identity);
     program_->setUniformValue("u_shadow_mode", 0);
-    glDrawArrays(GL_TRIANGLES, 0, vertex_count_);
+    program_->setUniformValue("u_albedo", 0);
+    if (mesh_groups_.empty()) {
+        program_->setUniformValue("u_has_texture", 0);
+        glDrawArrays(GL_TRIANGLES, 0, vertex_count_);
+    } else {
+        for (const auto& g : mesh_groups_) {
+            QOpenGLTexture* tex = nullptr;
+            if (!g.texture_path.isEmpty()) {
+                const std::string key = g.texture_path.toStdString();
+                auto it = texture_cache_.find(key);
+                if (it == texture_cache_.end()) {
+                    QImage img(g.texture_path);
+                    if (!img.isNull()) {
+                        auto t = std::make_unique<QOpenGLTexture>(img.flipped(Qt::Vertical));
+                        t->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+                        t->setMagnificationFilter(QOpenGLTexture::Linear);
+                        t->setWrapMode(QOpenGLTexture::Repeat);
+                        it = texture_cache_.emplace(key, std::move(t)).first;
+                    }
+                }
+                if (it != texture_cache_.end()) tex = it->second.get();
+            }
+            if (tex) {
+                tex->bind(0);
+                program_->setUniformValue("u_has_texture", 1);
+            } else {
+                program_->setUniformValue("u_has_texture", 0);
+            }
+            glDrawArrays(GL_TRIANGLES, g.offset, g.count);
+        }
+    }
 
     if (vertex_count_ > 6) {
         const QVector3D L(-0.4f, -0.3f, -1.0f);
@@ -737,6 +813,7 @@ void Viewport3D::paintGL() {
 
         program_->setUniformValue("u_model", shadow);
         program_->setUniformValue("u_shadow_mode", 1);
+        program_->setUniformValue("u_has_texture", 0);
         glDrawArrays(GL_TRIANGLES, 6, vertex_count_ - 6);
 
         glDisable(GL_POLYGON_OFFSET_FILL);

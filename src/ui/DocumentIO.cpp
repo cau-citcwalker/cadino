@@ -48,6 +48,7 @@ QJsonObject to_json(const cadino::core::Wall& w) {
     o["roughness"] = w.roughness;
     o["metallic"] = w.metallic;
     o["pattern"] = w.pattern;
+    o["texture_path"] = QString::fromStdString(w.texture_path);
     return o;
 }
 
@@ -64,6 +65,7 @@ QJsonObject to_json(const cadino::core::Box& b) {
     o["roughness"] = b.roughness;
     o["metallic"] = b.metallic;
     o["pattern"] = b.pattern;
+    o["texture_path"] = QString::fromStdString(b.texture_path);
     return o;
 }
 
@@ -339,6 +341,7 @@ QJsonObject to_json(const cadino::core::Cylinder& c) {
     o["roughness"] = c.roughness;
     o["metallic"] = c.metallic;
     o["pattern"] = c.pattern;
+    o["texture_path"] = QString::fromStdString(c.texture_path);
     return o;
 }
 
@@ -356,6 +359,7 @@ cadino::core::Wall wall_from(const QJsonObject& o) {
     w.roughness = static_cast<float>(o["roughness"].toDouble(w.roughness));
     w.metallic = static_cast<float>(o["metallic"].toDouble(w.metallic));
     w.pattern = o["pattern"].toInt(w.pattern);
+    w.texture_path = o["texture_path"].toString().toStdString();
     return w;
 }
 
@@ -374,6 +378,7 @@ cadino::core::Box box_from(const QJsonObject& o) {
     b.roughness = static_cast<float>(o["roughness"].toDouble(b.roughness));
     b.metallic = static_cast<float>(o["metallic"].toDouble(b.metallic));
     b.pattern = o["pattern"].toInt(b.pattern);
+    b.texture_path = o["texture_path"].toString().toStdString();
     return b;
 }
 
@@ -458,6 +463,7 @@ cadino::core::Cylinder cylinder_from(const QJsonObject& o) {
     c.roughness = static_cast<float>(o["roughness"].toDouble(c.roughness));
     c.metallic = static_cast<float>(o["metallic"].toDouble(c.metallic));
     c.pattern = o["pattern"].toInt(c.pattern);
+    c.texture_path = o["texture_path"].toString().toStdString();
     return c;
 }
 

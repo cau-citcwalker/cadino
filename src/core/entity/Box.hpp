@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <Eigen/Core>
 
 #include "Color.hpp"
@@ -19,6 +21,7 @@ struct Box {
     float roughness{0.6f};
     float metallic{0.0f};
     int pattern{0};  // 0=solid 1=checker 2=stripes 3=wood
+    std::string texture_path;  // absolute path to albedo texture image
 };
 
 }  // namespace cadino::core

@@ -3,6 +3,8 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -83,12 +85,19 @@ void PropertiesPanel::clear_form() {
     metallic_field_ = nullptr;
     pattern_combo_ = nullptr;
     color_button_ = nullptr;
+    texture_button_ = nullptr;
+    current_texture_path_.clear();
     while (form_->rowCount() > 0) {
         form_->removeRow(0);
     }
 }
 
 namespace {
+
+QString texture_label_for(const QString& path) {
+    if (path.isEmpty()) return QStringLiteral("Choose…");
+    return QFileInfo(path).fileName();
+}
 
 QComboBox* make_pattern_combo(QWidget* parent, int current) {
     auto* combo = new QComboBox(parent);
@@ -179,6 +188,21 @@ void PropertiesPanel::build_for_wall() {
     roughness_field_ = make_unit_field(w->roughness);
     metallic_field_ = make_unit_field(w->metallic);
     pattern_combo_ = make_pattern_combo(this, w->pattern);
+    current_texture_path_ = QString::fromStdString(w->texture_path);
+    texture_button_ = new QPushButton(texture_label_for(current_texture_path_), this);
+    connect(texture_button_, &QPushButton::clicked, this, [this] {
+        const QString path = QFileDialog::getOpenFileName(
+            this, "Choose albedo texture", current_texture_path_,
+            "Images (*.png *.jpg *.jpeg *.bmp *.tga);;All files (*)");
+        if (path.isEmpty() && !current_texture_path_.isEmpty()) {
+            // Allow clearing by clicking and cancelling intentionally — use
+            // a separate action below instead.
+            return;
+        }
+        current_texture_path_ = path;
+        if (texture_button_) texture_button_->setText(texture_label_for(path));
+        commit_wall_edit();
+    });
 
     form_->addRow("Start X", start_x);
     form_->addRow("Start Y", start_y);
@@ -190,6 +214,7 @@ void PropertiesPanel::build_for_wall() {
     form_->addRow("Roughness", roughness_field_);
     form_->addRow("Metallic", metallic_field_);
     form_->addRow("Pattern", pattern_combo_);
+    form_->addRow("Texture", texture_button_);
 
     fields_ = {start_x, start_y, end_x, end_y, height, thickness};
 
@@ -239,6 +264,17 @@ void PropertiesPanel::build_for_box() {
     roughness_field_ = make_unit_field(b->roughness);
     metallic_field_ = make_unit_field(b->metallic);
     pattern_combo_ = make_pattern_combo(this, b->pattern);
+    current_texture_path_ = QString::fromStdString(b->texture_path);
+    texture_button_ = new QPushButton(texture_label_for(current_texture_path_), this);
+    connect(texture_button_, &QPushButton::clicked, this, [this] {
+        const QString path = QFileDialog::getOpenFileName(
+            this, "Choose albedo texture", current_texture_path_,
+            "Images (*.png *.jpg *.jpeg *.bmp *.tga);;All files (*)");
+        if (path.isEmpty()) return;
+        current_texture_path_ = path;
+        if (texture_button_) texture_button_->setText(texture_label_for(path));
+        commit_box_edit();
+    });
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -251,6 +287,7 @@ void PropertiesPanel::build_for_box() {
     form_->addRow("Roughness", roughness_field_);
     form_->addRow("Metallic", metallic_field_);
     form_->addRow("Pattern", pattern_combo_);
+    form_->addRow("Texture", texture_button_);
 
     fields_ = {pos_x, pos_y, size_x, size_y, height, base_z, rotation};
 
@@ -291,6 +328,17 @@ void PropertiesPanel::build_for_cylinder() {
     roughness_field_ = make_unit_field(c->roughness);
     metallic_field_ = make_unit_field(c->metallic);
     pattern_combo_ = make_pattern_combo(this, c->pattern);
+    current_texture_path_ = QString::fromStdString(c->texture_path);
+    texture_button_ = new QPushButton(texture_label_for(current_texture_path_), this);
+    connect(texture_button_, &QPushButton::clicked, this, [this] {
+        const QString path = QFileDialog::getOpenFileName(
+            this, "Choose albedo texture", current_texture_path_,
+            "Images (*.png *.jpg *.jpeg *.bmp *.tga);;All files (*)");
+        if (path.isEmpty()) return;
+        current_texture_path_ = path;
+        if (texture_button_) texture_button_->setText(texture_label_for(path));
+        commit_cylinder_edit();
+    });
 
     form_->addRow("Position X", pos_x);
     form_->addRow("Position Y", pos_y);
@@ -301,6 +349,7 @@ void PropertiesPanel::build_for_cylinder() {
     form_->addRow("Roughness", roughness_field_);
     form_->addRow("Metallic", metallic_field_);
     form_->addRow("Pattern", pattern_combo_);
+    form_->addRow("Texture", texture_button_);
 
     fields_ = {pos_x, pos_y, radius, height, base_z};
 
@@ -332,11 +381,13 @@ void PropertiesPanel::commit_cylinder_edit() {
     if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
     if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
     if (pattern_combo_) after.pattern = pattern_combo_->currentIndex();
+    after.texture_path = current_texture_path_.toStdString();
 
     if (after.position == c->position && after.radius == c->radius &&
         after.height == c->height && after.base_z == c->base_z &&
         after.color == c->color && after.roughness == c->roughness &&
-        after.metallic == c->metallic && after.pattern == c->pattern) {
+        after.metallic == c->metallic && after.pattern == c->pattern &&
+        after.texture_path == c->texture_path) {
         return;
     }
 
@@ -360,11 +411,13 @@ void PropertiesPanel::commit_wall_edit() {
     if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
     if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
     if (pattern_combo_) after.pattern = pattern_combo_->currentIndex();
+    after.texture_path = current_texture_path_.toStdString();
 
     if (after.start == w->start && after.end == w->end &&
         after.height == w->height && after.thickness == w->thickness &&
         after.color == w->color && after.roughness == w->roughness &&
-        after.metallic == w->metallic && after.pattern == w->pattern) {
+        after.metallic == w->metallic && after.pattern == w->pattern &&
+        after.texture_path == w->texture_path) {
         return;
     }
 
@@ -389,12 +442,13 @@ void PropertiesPanel::commit_box_edit() {
     if (roughness_field_) after.roughness = static_cast<float>(roughness_field_->value());
     if (metallic_field_) after.metallic = static_cast<float>(metallic_field_->value());
     if (pattern_combo_) after.pattern = pattern_combo_->currentIndex();
+    after.texture_path = current_texture_path_.toStdString();
 
     if (after.position == b->position && after.size_xy == b->size_xy &&
         after.height == b->height && after.base_z == b->base_z &&
         after.rotation_z == b->rotation_z && after.color == b->color &&
         after.roughness == b->roughness && after.metallic == b->metallic &&
-        after.pattern == b->pattern) {
+        after.pattern == b->pattern && after.texture_path == b->texture_path) {
         return;
     }
 

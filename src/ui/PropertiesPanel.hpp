@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include <QString>
 #include <QWidget>
 
 #include "Selection.hpp"
@@ -62,6 +63,8 @@ private:
     QDoubleSpinBox* metallic_field_{nullptr};
     QComboBox* pattern_combo_{nullptr};
     QPushButton* color_button_{nullptr};
+    QPushButton* texture_button_{nullptr};
+    QString current_texture_path_{};
     cadino::core::Color current_color_{};
     bool suppress_commit_{false};
 };

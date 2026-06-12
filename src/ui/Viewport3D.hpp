@@ -1,16 +1,20 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 #include <QMatrix4x4>
 #include <QOpenGLBuffer>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLWidget>
 #include <QPointF>
+#include <QString>
 #include <QVector3D>
 
 #include "Selection.hpp"
@@ -73,6 +77,13 @@ private:
     QOpenGLBuffer vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject line_vao_;
     QOpenGLBuffer line_vbo_{QOpenGLBuffer::VertexBuffer};
+    struct DrawGroup {
+        int offset{0};
+        int count{0};
+        QString texture_path;
+    };
+    std::vector<DrawGroup> mesh_groups_;
+    std::unordered_map<std::string, std::unique_ptr<QOpenGLTexture>> texture_cache_;
     int vertex_count_{0};
     int line_vertex_count_{0};
     int walls_vertex_end_{6};

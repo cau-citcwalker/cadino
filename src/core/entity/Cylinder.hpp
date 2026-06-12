@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <Eigen/Core>
 
 #include "Color.hpp"
@@ -18,6 +20,7 @@ struct Cylinder {
     float roughness{0.5f};
     float metallic{0.0f};
     int pattern{0};
+    std::string texture_path;
 };
 
 }  // namespace cadino::core
