@@ -14,6 +14,7 @@ namespace cadino::core {
 struct NurbsSurface {
     EntityId id{};
     EntityId group_id{};
+    EntityId layer_id{};
     int degree_u{3};
     int degree_v{3};
     int rows{0};  // number of control points along U (along the v knot direction)

@@ -11,6 +11,7 @@ add_library(cadino_ui STATIC
     DimensionTool.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
+    LayerPanel.cpp
     Snap.cpp
     DocumentIO.cpp
     DxfExporter.cpp

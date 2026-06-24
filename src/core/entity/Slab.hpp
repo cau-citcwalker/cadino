@@ -10,6 +10,7 @@ namespace cadino::core {
 
 struct Slab {
     EntityId id{};
+    EntityId layer_id{};
     std::vector<Eigen::Vector2d> outline;
     double level{0.0};
     double thickness{200.0};

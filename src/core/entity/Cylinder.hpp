@@ -12,6 +12,7 @@ namespace cadino::core {
 struct Cylinder {
     EntityId id{};
     EntityId group_id{};
+    EntityId layer_id{};
     Eigen::Vector2d position{0.0, 0.0};
     double radius{300.0};
     double height{750.0};

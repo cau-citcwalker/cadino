@@ -278,7 +278,38 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
         }
     }
 
-    const Selection hit = pick_at(doc, model_pos, pick_radius);
+    Selection hit = pick_at(doc, model_pos, pick_radius);
+    if (hit.valid()) {
+        cadino::core::EntityId layer_id{};
+        switch (hit.kind) {
+            case SelectKind::Wall:
+                if (auto* w = doc.find_wall(hit.id)) layer_id = w->layer_id;
+                break;
+            case SelectKind::Box:
+                if (auto* b = doc.find_box(hit.id)) layer_id = b->layer_id;
+                break;
+            case SelectKind::Cylinder:
+                if (auto* c = doc.find_cylinder(hit.id)) layer_id = c->layer_id;
+                break;
+            case SelectKind::NurbsCurve:
+                if (auto* c = doc.find_curve(hit.id)) layer_id = c->layer_id;
+                break;
+            case SelectKind::NurbsSurface:
+                if (auto* s = doc.find_surface(hit.id)) layer_id = s->layer_id;
+                break;
+            case SelectKind::Block:
+                if (auto* b = doc.find_block(hit.id)) layer_id = b->layer_id;
+                break;
+            case SelectKind::BlockInstance:
+                if (auto* i = doc.find_block_instance(hit.id)) layer_id = i->layer_id;
+                break;
+            case SelectKind::Dimension:
+                if (auto* d = doc.find_dimension(hit.id)) layer_id = d->layer_id;
+                break;
+            default: break;
+        }
+        if (view.layer_locked(layer_id)) hit = {};
+    }
     const bool shift = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
 
     if (!hit.valid()) {

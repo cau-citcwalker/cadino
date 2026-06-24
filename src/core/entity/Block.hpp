@@ -17,6 +17,7 @@ namespace cadino::core {
 struct Block {
     EntityId id{};
     EntityId group_id{};
+    EntityId layer_id{};
     std::string name{"Block"};
     Eigen::Vector2d position{0.0, 0.0};
     double rotation_z{0.0};   // radians

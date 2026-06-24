@@ -18,6 +18,7 @@ namespace cadino::core {
 struct Dimension {
     EntityId id{};
     EntityId group_id{};
+    EntityId layer_id{};
     Eigen::Vector2d start{0.0, 0.0};
     Eigen::Vector2d end{0.0, 0.0};
     double offset{300.0};           // perpendicular distance from segment (mm)

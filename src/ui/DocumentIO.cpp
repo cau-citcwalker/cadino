@@ -36,10 +36,31 @@ cadino::core::Color color_from(const QJsonArray& a) {
     return c;
 }
 
+QJsonObject to_json(const cadino::core::Layer& l) {
+    QJsonObject o;
+    o["id"] = qint64(l.id.value);
+    o["name"] = QString::fromStdString(l.name);
+    o["color"] = color_array(l.color);
+    o["visible"] = l.visible;
+    o["locked"] = l.locked;
+    return o;
+}
+
+cadino::core::Layer layer_from(const QJsonObject& o) {
+    cadino::core::Layer l;
+    l.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    l.name = o["name"].toString().toStdString();
+    if (o.contains("color")) l.color = color_from(o["color"].toArray());
+    l.visible = o["visible"].toBool(true);
+    l.locked = o["locked"].toBool(false);
+    return l;
+}
+
 QJsonObject to_json(const cadino::core::Wall& w) {
     QJsonObject o;
     o["id"] = qint64(w.id.value);
     o["group_id"] = qint64(w.group_id.value);
+    o["layer_id"] = qint64(w.layer_id.value);
     o["start"] = vec2_array(w.start.x(), w.start.y());
     o["end"] = vec2_array(w.end.x(), w.end.y());
     o["height"] = w.height;
@@ -56,6 +77,7 @@ QJsonObject to_json(const cadino::core::Box& b) {
     QJsonObject o;
     o["id"] = qint64(b.id.value);
     o["group_id"] = qint64(b.group_id.value);
+    o["layer_id"] = qint64(b.layer_id.value);
     o["position"] = vec2_array(b.position.x(), b.position.y());
     o["size_xy"] = vec2_array(b.size_xy.x(), b.size_xy.y());
     o["height"] = b.height;
@@ -73,6 +95,7 @@ QJsonObject to_json(const cadino::core::Block& bl) {
     QJsonObject o;
     o["id"] = qint64(bl.id.value);
     o["group_id"] = qint64(bl.group_id.value);
+    o["layer_id"] = qint64(bl.layer_id.value);
     o["name"] = QString::fromStdString(bl.name);
     o["position"] = vec2_array(bl.position.x(), bl.position.y());
     o["rotation_z"] = bl.rotation_z;
@@ -113,6 +136,7 @@ cadino::core::Block block_from(const QJsonObject& o) {
     cadino::core::Block bl;
     bl.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     bl.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    bl.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     bl.name = o["name"].toString().toStdString();
     const auto p = o["position"].toArray();
     if (p.size() >= 2) bl.position = {p[0].toDouble(), p[1].toDouble()};
@@ -234,6 +258,7 @@ QJsonObject to_json(const cadino::core::BlockInstance& inst) {
     QJsonObject o;
     o["id"] = qint64(inst.id.value);
     o["group_id"] = qint64(inst.group_id.value);
+    o["layer_id"] = qint64(inst.layer_id.value);
     o["definition_id"] = qint64(inst.definition_id.value);
     o["position"] = vec2_array(inst.position.x(), inst.position.y());
     o["rotation_z"] = inst.rotation_z;
@@ -245,6 +270,7 @@ cadino::core::BlockInstance block_instance_from(const QJsonObject& o) {
     cadino::core::BlockInstance inst;
     inst.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     inst.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    inst.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     inst.definition_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["definition_id"].toVariant().toULongLong())};
     const auto p = o["position"].toArray();
     if (p.size() >= 2) inst.position = {p[0].toDouble(), p[1].toDouble()};
@@ -257,6 +283,7 @@ QJsonObject to_json(const cadino::core::NurbsSurface& ns) {
     QJsonObject o;
     o["id"] = qint64(ns.id.value);
     o["group_id"] = qint64(ns.group_id.value);
+    o["layer_id"] = qint64(ns.layer_id.value);
     o["degree_u"] = ns.degree_u;
     o["degree_v"] = ns.degree_v;
     o["rows"] = ns.rows;
@@ -279,6 +306,7 @@ cadino::core::NurbsSurface surface_from(const QJsonObject& o) {
     cadino::core::NurbsSurface ns;
     ns.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     ns.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    ns.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     ns.degree_u = o["degree_u"].toInt(ns.degree_u);
     ns.degree_v = o["degree_v"].toInt(ns.degree_v);
     ns.rows = o["rows"].toInt(0);
@@ -300,6 +328,7 @@ QJsonObject to_json(const cadino::core::NurbsCurve& nc) {
     QJsonObject o;
     o["id"] = qint64(nc.id.value);
     o["group_id"] = qint64(nc.group_id.value);
+    o["layer_id"] = qint64(nc.layer_id.value);
     o["degree"] = nc.degree;
     o["color"] = color_array(nc.color);
     o["line_width"] = nc.line_width;
@@ -317,6 +346,7 @@ cadino::core::NurbsCurve curve_from(const QJsonObject& o) {
     cadino::core::NurbsCurve nc;
     nc.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     nc.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    nc.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     nc.degree = o["degree"].toInt(nc.degree);
     if (o.contains("color")) nc.color = color_from(o["color"].toArray());
     nc.line_width = static_cast<float>(o["line_width"].toDouble(nc.line_width));
@@ -333,6 +363,7 @@ QJsonObject to_json(const cadino::core::Cylinder& c) {
     QJsonObject o;
     o["id"] = qint64(c.id.value);
     o["group_id"] = qint64(c.group_id.value);
+    o["layer_id"] = qint64(c.layer_id.value);
     o["position"] = vec2_array(c.position.x(), c.position.y());
     o["radius"] = c.radius;
     o["height"] = c.height;
@@ -349,6 +380,7 @@ cadino::core::Wall wall_from(const QJsonObject& o) {
     cadino::core::Wall w;
     w.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     w.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    w.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     const auto s = o["start"].toArray();
     const auto e = o["end"].toArray();
     if (s.size() >= 2) w.start = {s[0].toDouble(), s[1].toDouble()};
@@ -367,6 +399,7 @@ cadino::core::Box box_from(const QJsonObject& o) {
     cadino::core::Box b;
     b.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     b.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    b.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     const auto p = o["position"].toArray();
     const auto sz = o["size_xy"].toArray();
     if (p.size() >= 2) b.position = {p[0].toDouble(), p[1].toDouble()};
@@ -407,6 +440,7 @@ QJsonObject to_json(const cadino::core::Window& w) {
 QJsonObject to_json(const cadino::core::Slab& s) {
     QJsonObject o;
     o["id"] = qint64(s.id.value);
+    o["layer_id"] = qint64(s.layer_id.value);
     QJsonArray outline;
     for (const auto& v : s.outline) outline.append(vec2_array(v.x(), v.y()));
     o["outline"] = outline;
@@ -440,6 +474,7 @@ cadino::core::Window window_from(const QJsonObject& o) {
 cadino::core::Slab slab_from(const QJsonObject& o) {
     cadino::core::Slab s;
     s.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    s.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     const auto outline = o["outline"].toArray();
     for (const auto& v : outline) {
         const auto pt = v.toArray();
@@ -454,6 +489,7 @@ QJsonObject to_json(const cadino::core::Dimension& d) {
     QJsonObject o;
     o["id"] = qint64(d.id.value);
     o["group_id"] = qint64(d.group_id.value);
+    o["layer_id"] = qint64(d.layer_id.value);
     o["start"] = vec2_array(d.start.x(), d.start.y());
     o["end"] = vec2_array(d.end.x(), d.end.y());
     o["offset"] = d.offset;
@@ -468,6 +504,7 @@ cadino::core::Dimension dimension_from(const QJsonObject& o) {
     cadino::core::Dimension d;
     d.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     d.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    d.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     const auto s = o["start"].toArray();
     const auto e = o["end"].toArray();
     if (s.size() >= 2) d.start = {s[0].toDouble(), s[1].toDouble()};
@@ -484,6 +521,7 @@ cadino::core::Cylinder cylinder_from(const QJsonObject& o) {
     cadino::core::Cylinder c;
     c.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
     c.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    c.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     const auto p = o["position"].toArray();
     if (p.size() >= 2) c.position = {p[0].toDouble(), p[1].toDouble()};
     c.radius = o["radius"].toDouble(c.radius);
@@ -553,6 +591,12 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     for (const auto& [id, d] : doc.dimensions()) dims_json.append(to_json(d));
     root["dimensions"] = dims_json;
 
+    QJsonArray layers_json;
+    for (const auto& [id, l] : doc.layers()) layers_json.append(to_json(l));
+    root["layers"] = layers_json;
+    root["active_layer"] = qint64(doc.active_layer().value);
+    root["default_layer"] = qint64(doc.default_layer().value);
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         if (error) *error = file.errorString();
@@ -587,6 +631,20 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
 
     cadino::core::Document loaded;
     std::uint64_t max_id = 0;
+    if (root.contains("layers")) {
+        loaded.reset_layers();
+        for (const auto& v : root["layers"].toArray()) {
+            auto l = layer_from(v.toObject());
+            max_id = std::max(max_id, l.id.value);
+            loaded.add_layer(std::move(l));
+        }
+        const auto def_id = cadino::core::EntityId{
+            static_cast<std::uint64_t>(root["default_layer"].toVariant().toULongLong())};
+        const auto act_id = cadino::core::EntityId{
+            static_cast<std::uint64_t>(root["active_layer"].toVariant().toULongLong())};
+        loaded.set_default_layer(def_id);
+        loaded.set_active_layer(act_id.valid() ? act_id : def_id);
+    }
     for (const auto& v : root["walls"].toArray()) {
         auto w = wall_from(v.toObject());
         max_id = std::max(max_id, w.id.value);

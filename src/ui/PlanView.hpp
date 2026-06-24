@@ -56,6 +56,9 @@ public:
     [[nodiscard]] SnapEngine& snap_engine() noexcept { return snap_; }
     [[nodiscard]] const SnapResult& last_snap() const noexcept { return last_snap_; }
 
+    [[nodiscard]] bool layer_visible(cadino::core::EntityId layer_id) const;
+    [[nodiscard]] bool layer_locked(cadino::core::EntityId layer_id) const;
+
 signals:
     void document_modified();
     void selection_changed();

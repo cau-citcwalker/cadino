@@ -16,6 +16,7 @@ namespace cadino::core {
 struct BlockInstance {
     EntityId id{};
     EntityId group_id{};
+    EntityId layer_id{};
     EntityId definition_id{};
     Eigen::Vector2d position{0.0, 0.0};
     double rotation_z{0.0};

@@ -9,6 +9,7 @@
 #include "entity/Cylinder.hpp"
 #include "entity/Dimension.hpp"
 #include "entity/Door.hpp"
+#include "entity/Layer.hpp"
 #include "entity/MeshGeometry.hpp"
 #include "entity/NurbsCurve.hpp"
 #include "entity/NurbsSurface.hpp"
@@ -20,6 +21,23 @@ namespace cadino::core {
 
 class Document {
 public:
+    Document();
+
+    EntityId add_layer(Layer layer);
+    [[nodiscard]] const Layer* find_layer(EntityId id) const;
+    [[nodiscard]] Layer* find_layer(EntityId id);
+    bool remove_layer(EntityId id);
+    [[nodiscard]] const std::unordered_map<EntityId, Layer>& layers() const noexcept { return layers_; }
+    [[nodiscard]] EntityId active_layer() const noexcept { return active_layer_; }
+    void set_active_layer(EntityId id) noexcept { active_layer_ = id; }
+    [[nodiscard]] EntityId default_layer() const noexcept { return default_layer_; }
+    void set_default_layer(EntityId id) noexcept { default_layer_ = id; }
+    void reset_layers() noexcept {
+        layers_.clear();
+        default_layer_ = {};
+        active_layer_ = {};
+    }
+
     EntityId add_wall(Wall wall);
     EntityId add_door(Door door);
     EntityId add_window(Window win);
@@ -110,6 +128,9 @@ private:
     std::unordered_map<EntityId, BlockDefinition> block_defs_;
     std::unordered_map<EntityId, BlockInstance> block_instances_;
     std::unordered_map<EntityId, Dimension> dimensions_;
+    std::unordered_map<EntityId, Layer> layers_;
+    EntityId default_layer_{};
+    EntityId active_layer_{};
 };
 
 }  // namespace cadino::core

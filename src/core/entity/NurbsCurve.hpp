@@ -17,6 +17,7 @@ namespace cadino::core {
 struct NurbsCurve {
     EntityId id{};
     EntityId group_id{};
+    EntityId layer_id{};
     int degree{3};
     std::vector<Eigen::Vector3d> control_points;
     Color color{0.20f, 0.85f, 0.95f};

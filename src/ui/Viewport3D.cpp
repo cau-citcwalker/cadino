@@ -431,13 +431,21 @@ void Viewport3D::rebuild_mesh() {
     auto& untex = buckets[QString()];
     untex.reserve(36 * document_.walls().size() + 6);
 
+    auto layer_visible = [this](cadino::core::EntityId lid) {
+        if (!lid.valid()) return true;
+        const auto* l = document_.find_layer(lid);
+        return !l || l->visible;
+    };
+
     push_ground_grid(untex, 20000.0f);
     for (const auto& [id, w] : document_.walls()) {
+        if (!layer_visible(w.layer_id)) continue;
         auto& b = buckets[QString::fromStdString(w.texture_path)];
         push_wall_box(b, w);
     }
     const std::size_t walls_end = untex.size();
     for (const auto& [id, b] : document_.boxes()) {
+        if (!layer_visible(b.layer_id)) continue;
         auto& bucket = buckets[QString::fromStdString(b.texture_path)];
         const QVector3D center(static_cast<float>(b.position.x()),
                                static_cast<float>(b.position.y()), 0.0f);
@@ -451,6 +459,7 @@ void Viewport3D::rebuild_mesh() {
                           b.roughness, b.metallic, static_cast<float>(b.pattern));
     }
     for (const auto& [id, c] : document_.cylinders()) {
+        if (!layer_visible(c.layer_id)) continue;
         auto& bucket = buckets[QString::fromStdString(c.texture_path)];
         const QVector3D center(static_cast<float>(c.position.x()),
                                static_cast<float>(c.position.y()), 0.0f);
@@ -461,6 +470,7 @@ void Viewport3D::rebuild_mesh() {
                       c.roughness, c.metallic, static_cast<float>(c.pattern));
     }
     for (const auto& [id, block] : document_.blocks()) {
+        if (!layer_visible(block.layer_id)) continue;
         for (const auto& local_b : block.boxes) {
             const auto b = block.world_box(local_b);
             auto& bucket = buckets[QString::fromStdString(b.texture_path)];
@@ -488,6 +498,7 @@ void Viewport3D::rebuild_mesh() {
         }
     }
     for (const auto& [id, inst] : document_.block_instances()) {
+        if (!layer_visible(inst.layer_id)) continue;
         const auto* def = document_.find_block_def(inst.definition_id);
         if (!def) continue;
         for (const auto& local_b : def->boxes) {
@@ -517,6 +528,7 @@ void Viewport3D::rebuild_mesh() {
         }
     }
     for (const auto& [id, surf] : document_.surfaces()) {
+        if (!layer_visible(surf.layer_id)) continue;
         auto& bucket = untex;
         const auto tess = surf.tessellate(24, 24);
         const QVector3D color(surf.color.r, surf.color.g, surf.color.b);
@@ -566,6 +578,7 @@ void Viewport3D::rebuild_mesh() {
         }
     }
     for (const auto& [id, s] : document_.slabs()) {
+        if (!layer_visible(s.layer_id)) continue;
         if (s.outline.size() < 3) continue;
         double minx = s.outline[0].x(), miny = s.outline[0].y();
         double maxx = minx, maxy = miny;
@@ -966,7 +979,14 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
     Selection best{};
     float best_t = std::numeric_limits<float>::infinity();
 
+    auto layer_pickable = [this](cadino::core::EntityId lid) {
+        if (!lid.valid()) return true;
+        const auto* l = document_.find_layer(lid);
+        return !l || (l->visible && !l->locked);
+    };
+
     for (const auto& [id, b] : document_.boxes()) {
+        if (!layer_pickable(b.layer_id)) continue;
         const QVector3D center(static_cast<float>(b.position.x()),
                                static_cast<float>(b.position.y()), 0.0f);
         float t;
@@ -984,6 +1004,7 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
     }
 
     for (const auto& [id, c] : document_.cylinders()) {
+        if (!layer_pickable(c.layer_id)) continue;
         const QVector3D center(static_cast<float>(c.position.x()),
                                static_cast<float>(c.position.y()), 0.0f);
         float t;
@@ -999,6 +1020,7 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
     }
 
     for (const auto& [id, w] : document_.walls()) {
+        if (!layer_pickable(w.layer_id)) continue;
         const QVector3D s(static_cast<float>(w.start.x()),
                           static_cast<float>(w.start.y()), 0.0f);
         const QVector3D e(static_cast<float>(w.end.x()),
@@ -1040,6 +1062,7 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
     };
 
     for (const auto& [id, bk] : document_.blocks()) {
+        if (!layer_pickable(bk.layer_id)) continue;
         for (const auto& local_b : bk.boxes) {
             float t;
             if (pick_box_world(bk.world_box(local_b), t) && t < best_t) {
@@ -1056,6 +1079,7 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
         }
     }
     for (const auto& [id, inst] : document_.block_instances()) {
+        if (!layer_pickable(inst.layer_id)) continue;
         const auto* def = document_.find_block_def(inst.definition_id);
         if (!def) continue;
         for (const auto& local_b : def->boxes) {
@@ -1074,6 +1098,7 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
         }
     }
     for (const auto& [id, surf] : document_.surfaces()) {
+        if (!layer_pickable(surf.layer_id)) continue;
         if (surf.control_points.empty()) continue;
         Eigen::Vector3d lo = surf.control_points.front();
         Eigen::Vector3d hi = lo;

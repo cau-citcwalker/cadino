@@ -23,6 +23,7 @@
 #include "BooleanOps.hpp"
 #include "BoxTool.hpp"
 #include "DimensionTool.hpp"
+#include "LayerPanel.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
@@ -67,11 +68,20 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
+    layer_panel_ = new cadino::ui::LayerPanel(document_, *plan_view_, this);
+    layer_panel_->register_viewport3d(viewport_3d_);
+    auto* layer_dock = new QDockWidget("Layers", this);
+    layer_dock->setWidget(layer_panel_);
+    layer_dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::RightDockWidgetArea, layer_dock);
+
     connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, [this] {
         properties_->set_selection(plan_view_->primary_selection());
     });
     connect(plan_view_, &cadino::ui::PlanView::document_modified, properties_,
             &cadino::ui::PropertiesPanel::refresh);
+    connect(plan_view_, &cadino::ui::PlanView::document_modified, layer_panel_,
+            &cadino::ui::LayerPanel::refresh);
 
     activate_select_tool();
     // Defer the initial mode switch until after Qt finishes the first window

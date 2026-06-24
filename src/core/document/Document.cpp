@@ -22,19 +22,63 @@ auto* find_in(Map& map, EntityId id) {
 
 }  // namespace
 
-EntityId Document::add_wall(Wall wall)     { return insert_with_id(walls_,   std::move(wall)); }
+Document::Document() {
+    Layer default_layer;
+    default_layer.name = "Default";
+    default_layer.color = Color{0.85f, 0.85f, 0.85f};
+    default_layer_ = add_layer(std::move(default_layer));
+    active_layer_ = default_layer_;
+}
+
+EntityId Document::add_layer(Layer layer) { return insert_with_id(layers_, std::move(layer)); }
+const Layer* Document::find_layer(EntityId id) const { return find_in(layers_, id); }
+Layer*       Document::find_layer(EntityId id)       { return find_in(layers_, id); }
+bool Document::remove_layer(EntityId id) {
+    if (id == default_layer_) return false;
+    if (active_layer_ == id) active_layer_ = default_layer_;
+    return layers_.erase(id) > 0;
+}
+
+EntityId Document::add_wall(Wall wall) {
+    if (!wall.layer_id.valid()) wall.layer_id = active_layer_;
+    return insert_with_id(walls_, std::move(wall));
+}
 EntityId Document::add_door(Door door)     { return insert_with_id(doors_,   std::move(door)); }
 EntityId Document::add_window(Window win)  { return insert_with_id(windows_, std::move(win));  }
-EntityId Document::add_slab(Slab slab)     { return insert_with_id(slabs_,   std::move(slab)); }
-EntityId Document::add_box(Box box)        { return insert_with_id(boxes_,   std::move(box));  }
-EntityId Document::add_cylinder(Cylinder c){ return insert_with_id(cylinders_, std::move(c));  }
+EntityId Document::add_slab(Slab slab) {
+    if (!slab.layer_id.valid()) slab.layer_id = active_layer_;
+    return insert_with_id(slabs_, std::move(slab));
+}
+EntityId Document::add_box(Box box) {
+    if (!box.layer_id.valid()) box.layer_id = active_layer_;
+    return insert_with_id(boxes_, std::move(box));
+}
+EntityId Document::add_cylinder(Cylinder c) {
+    if (!c.layer_id.valid()) c.layer_id = active_layer_;
+    return insert_with_id(cylinders_, std::move(c));
+}
 EntityId Document::add_mesh(MeshGeometry m){ return insert_with_id(meshes_,   std::move(m));  }
-EntityId Document::add_curve(NurbsCurve c){ return insert_with_id(curves_,    std::move(c));  }
-EntityId Document::add_block(Block b)     { return insert_with_id(blocks_,    std::move(b));  }
-EntityId Document::add_surface(NurbsSurface s){ return insert_with_id(surfaces_, std::move(s));}
+EntityId Document::add_curve(NurbsCurve c) {
+    if (!c.layer_id.valid()) c.layer_id = active_layer_;
+    return insert_with_id(curves_, std::move(c));
+}
+EntityId Document::add_block(Block b) {
+    if (!b.layer_id.valid()) b.layer_id = active_layer_;
+    return insert_with_id(blocks_, std::move(b));
+}
+EntityId Document::add_surface(NurbsSurface s) {
+    if (!s.layer_id.valid()) s.layer_id = active_layer_;
+    return insert_with_id(surfaces_, std::move(s));
+}
 EntityId Document::add_block_def(BlockDefinition d){ return insert_with_id(block_defs_, std::move(d));}
-EntityId Document::add_block_instance(BlockInstance i){ return insert_with_id(block_instances_, std::move(i));}
-EntityId Document::add_dimension(Dimension d){ return insert_with_id(dimensions_, std::move(d));}
+EntityId Document::add_block_instance(BlockInstance i) {
+    if (!i.layer_id.valid()) i.layer_id = active_layer_;
+    return insert_with_id(block_instances_, std::move(i));
+}
+EntityId Document::add_dimension(Dimension d) {
+    if (!d.layer_id.valid()) d.layer_id = active_layer_;
+    return insert_with_id(dimensions_, std::move(d));
+}
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }

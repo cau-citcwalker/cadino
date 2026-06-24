@@ -135,6 +135,7 @@ void PlanView::draw_slabs(QPainter& p) {
     p.setBrush(QColor(190, 165, 130, 50));
 
     for (const auto& [id, s] : document_.slabs()) {
+        if (!layer_visible(s.layer_id)) continue;
         if (s.outline.size() < 3) continue;
         QPolygonF poly;
         for (const auto& v : s.outline) {
@@ -204,12 +205,25 @@ void PlanView::draw_cylinders(QPainter& p) {
     p.setPen(pen);
 
     for (const auto& [id, c] : document_.cylinders()) {
+        if (!layer_visible(c.layer_id)) continue;
         p.setBrush(QColor::fromRgbF(c.color.r, c.color.g, c.color.b, 0.55f));
         const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
         const double r_s = c.radius * zoom_;
         p.drawEllipse(center_s, r_s, r_s);
         p.drawPoint(center_s);
     }
+}
+
+bool PlanView::layer_visible(cadino::core::EntityId layer_id) const {
+    if (!layer_id.valid()) return true;
+    const auto* layer = document_.find_layer(layer_id);
+    return !layer || layer->visible;
+}
+
+bool PlanView::layer_locked(cadino::core::EntityId layer_id) const {
+    if (!layer_id.valid()) return false;
+    const auto* layer = document_.find_layer(layer_id);
+    return layer && layer->locked;
 }
 
 QPointF PlanView::apply_snap(QPointF model_pos) {
@@ -344,6 +358,7 @@ void PlanView::draw_walls(QPainter& p) {
     p.setPen(wall_pen);
 
     for (const auto& [id, w] : document_.walls()) {
+        if (!layer_visible(w.layer_id)) continue;
         p.setBrush(QColor::fromRgbF(w.color.r, w.color.g, w.color.b, 0.55f));
         const QPointF start_m{w.start.x(), w.start.y()};
         const QPointF end_m{w.end.x(), w.end.y()};
@@ -375,6 +390,7 @@ void PlanView::draw_block_instances(QPainter& p) {
     edge_pen.setWidth(2);
 
     for (const auto& [id, inst] : document_.block_instances()) {
+        if (!layer_visible(inst.layer_id)) continue;
         const auto* def = document_.find_block_def(inst.definition_id);
         if (!def) continue;
         const bool selected = is_selected({id, SelectKind::BlockInstance});
@@ -435,6 +451,7 @@ void PlanView::draw_block_instances(QPainter& p) {
 
 void PlanView::draw_surfaces(QPainter& p) {
     for (const auto& [id, surf] : document_.surfaces()) {
+        if (!layer_visible(surf.layer_id)) continue;
         if (surf.rows < 2 || surf.cols < 2) continue;
         const bool selected = is_selected({id, SelectKind::NurbsSurface});
 
@@ -491,6 +508,7 @@ void PlanView::draw_blocks(QPainter& p) {
     block_pen.setWidth(2);
 
     for (const auto& [id, block] : document_.blocks()) {
+        if (!layer_visible(block.layer_id)) continue;
         const bool selected = is_selected({id, SelectKind::Block});
 
         // Boxes
@@ -548,6 +566,7 @@ void PlanView::draw_blocks(QPainter& p) {
 
 void PlanView::draw_curves(QPainter& p) {
     for (const auto& [id, curve] : document_.curves()) {
+        if (!layer_visible(curve.layer_id)) continue;
         const auto samples = curve.tessellate(128);
         if (samples.size() < 2) continue;
 
@@ -591,6 +610,7 @@ void PlanView::draw_boxes(QPainter& p) {
     p.setPen(box_pen);
 
     for (const auto& [id, b] : document_.boxes()) {
+        if (!layer_visible(b.layer_id)) continue;
         p.setBrush(QColor::fromRgbF(b.color.r, b.color.g, b.color.b, 0.55f));
         const double hx = b.size_xy.x() * 0.5;
         const double hy = b.size_xy.y() * 0.5;
@@ -619,6 +639,7 @@ void PlanView::draw_boxes(QPainter& p) {
 
 void PlanView::draw_dimensions(QPainter& p) {
     for (const auto& [id, d] : document_.dimensions()) {
+        if (!layer_visible(d.layer_id)) continue;
         const Eigen::Vector2d v = d.end - d.start;
         const double len = v.norm();
         if (len < 1e-6) continue;
