@@ -18,6 +18,8 @@
 #include <QVector3D>
 
 #include "Selection.hpp"
+#include "entity/Block.hpp"
+#include "entity/BlockInstance.hpp"
 #include "entity/Box.hpp"
 #include "entity/Cylinder.hpp"
 #include "entity/EntityId.hpp"
@@ -68,6 +70,17 @@ private:
     [[nodiscard]] Selection pick_at_screen(QPointF screen_pos, float* t_out = nullptr) const;
     void emit_drag_commands();
 
+    enum class GizmoAxis { None, X, Y, Z };
+    [[nodiscard]] bool selection_centroid(QVector3D& out) const;
+    [[nodiscard]] float gizmo_length() const;
+    [[nodiscard]] GizmoAxis pick_gizmo_axis(QPointF screen_pos) const;
+    [[nodiscard]] QVector3D axis_direction(GizmoAxis a) const;
+    [[nodiscard]] bool axis_param(const Ray& ray, const QVector3D& pivot,
+                                  const QVector3D& axis, float& s_out) const;
+    void render_gizmo();
+    void capture_drag_originals();
+    void apply_drag_delta(const QVector3D& delta);
+
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;
     PlanView& plan_view_;
@@ -77,6 +90,8 @@ private:
     QOpenGLBuffer vbo_{QOpenGLBuffer::VertexBuffer};
     QOpenGLVertexArrayObject line_vao_;
     QOpenGLBuffer line_vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject gizmo_vao_;
+    QOpenGLBuffer gizmo_vbo_{QOpenGLBuffer::VertexBuffer};
     struct DrawGroup {
         int offset{0};
         int count{0};
@@ -102,8 +117,15 @@ private:
 
     bool entity_dragging_{false};
     QVector3D drag_ground_start_{};
+    GizmoAxis active_axis_{GizmoAxis::None};
+    GizmoAxis hovered_axis_{GizmoAxis::None};
+    QVector3D gizmo_pivot_{};
+    QVector3D gizmo_axis_dir_{};
+    float drag_axis_s0_{0.0f};
     using EntitySnapshot = std::variant<cadino::core::Wall, cadino::core::Box,
-                                         cadino::core::Cylinder>;
+                                         cadino::core::Cylinder,
+                                         cadino::core::Block,
+                                         cadino::core::BlockInstance>;
     std::unordered_map<cadino::core::EntityId, EntitySnapshot> drag_originals_;
 };
 

@@ -9,6 +9,7 @@ cmake-build-*/
 .idea/
 *.user
 CMakeUserPresets.json
+.claude/
 
 # CMake
 CMakeCache.txt

@@ -15,6 +15,8 @@
 #include <spdlog/spdlog.h>
 
 #include "PlanView.hpp"
+#include "command/BlockCommands.hpp"
+#include "command/BlockInstanceCommands.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
 #include "command/CylinderCommands.hpp"
@@ -379,6 +381,10 @@ Viewport3D::~Viewport3D() {
     makeCurrent();
     vbo_.destroy();
     vao_.destroy();
+    line_vbo_.destroy();
+    line_vao_.destroy();
+    gizmo_vbo_.destroy();
+    gizmo_vao_.destroy();
     program_.reset();
     doneCurrent();
 }
@@ -407,6 +413,10 @@ void Viewport3D::initializeGL() {
     line_vao_.create();
     line_vbo_.create();
     line_vbo_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
+
+    gizmo_vao_.create();
+    gizmo_vbo_.create();
+    gizmo_vbo_.setUsagePattern(QOpenGLBuffer::DynamicDraw);
 }
 
 void Viewport3D::resizeGL(int w, int h) {
@@ -832,6 +842,8 @@ void Viewport3D::paintGL() {
         line_vao_.release();
     }
 
+    render_gizmo();
+
     program_->release();
 }
 
@@ -1008,6 +1020,83 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
         }
     }
 
+    auto pick_box_world = [&](const cadino::core::Box& b, float& t) -> bool {
+        const QVector3D center(static_cast<float>(b.position.x()),
+                               static_cast<float>(b.position.y()), 0.0f);
+        return ray_vs_obox(ray.origin, ray.direction, center,
+                           static_cast<float>(b.size_xy.x() * 0.5),
+                           static_cast<float>(b.size_xy.y() * 0.5),
+                           static_cast<float>(b.base_z),
+                           static_cast<float>(b.base_z + b.height),
+                           static_cast<float>(b.rotation_z), t);
+    };
+    auto pick_cyl_world = [&](const cadino::core::Cylinder& c, float& t) -> bool {
+        const QVector3D center(static_cast<float>(c.position.x()),
+                               static_cast<float>(c.position.y()), 0.0f);
+        return ray_vs_cyl(ray.origin, ray.direction, center,
+                          static_cast<float>(c.radius),
+                          static_cast<float>(c.base_z),
+                          static_cast<float>(c.base_z + c.height), t);
+    };
+
+    for (const auto& [id, bk] : document_.blocks()) {
+        for (const auto& local_b : bk.boxes) {
+            float t;
+            if (pick_box_world(bk.world_box(local_b), t) && t < best_t) {
+                best_t = t;
+                best = {id, SelectKind::Block};
+            }
+        }
+        for (const auto& local_c : bk.cylinders) {
+            float t;
+            if (pick_cyl_world(bk.world_cylinder(local_c), t) && t < best_t) {
+                best_t = t;
+                best = {id, SelectKind::Block};
+            }
+        }
+    }
+    for (const auto& [id, inst] : document_.block_instances()) {
+        const auto* def = document_.find_block_def(inst.definition_id);
+        if (!def) continue;
+        for (const auto& local_b : def->boxes) {
+            float t;
+            if (pick_box_world(inst.world_box(local_b), t) && t < best_t) {
+                best_t = t;
+                best = {id, SelectKind::BlockInstance};
+            }
+        }
+        for (const auto& local_c : def->cylinders) {
+            float t;
+            if (pick_cyl_world(inst.world_cylinder(local_c), t) && t < best_t) {
+                best_t = t;
+                best = {id, SelectKind::BlockInstance};
+            }
+        }
+    }
+    for (const auto& [id, surf] : document_.surfaces()) {
+        if (surf.control_points.empty()) continue;
+        Eigen::Vector3d lo = surf.control_points.front();
+        Eigen::Vector3d hi = lo;
+        for (const auto& p : surf.control_points) {
+            lo = lo.cwiseMin(p);
+            hi = hi.cwiseMax(p);
+        }
+        const QVector3D center(static_cast<float>((lo.x() + hi.x()) * 0.5),
+                               static_cast<float>((lo.y() + hi.y()) * 0.5),
+                               static_cast<float>((lo.z() + hi.z()) * 0.5));
+        const float hx = static_cast<float>((hi.x() - lo.x()) * 0.5);
+        const float hy = static_cast<float>((hi.y() - lo.y()) * 0.5);
+        const float zmin = static_cast<float>(lo.z());
+        const float zmax = static_cast<float>(hi.z());
+        float t;
+        if (ray_vs_obox(ray.origin, ray.direction,
+                        QVector3D(center.x(), center.y(), 0.0f), hx, hy,
+                        zmin, zmax, 0.0f, t) && t < best_t) {
+            best_t = t;
+            best = {id, SelectKind::NurbsSurface};
+        }
+    }
+
     if (t_out) *t_out = best_t;
     return best;
 }
@@ -1038,9 +1127,308 @@ void Viewport3D::emit_drag_commands() {
             cadino::core::Cylinder after = *c;
             *c = orig;
             stack_.execute(std::make_unique<cadino::core::ModifyCylinderCommand>(sel.id, std::move(after)));
+        } else if (sel.kind == SelectKind::Block) {
+            auto* bk = document_.find_block(sel.id);
+            if (!bk) continue;
+            const auto& orig = std::get<cadino::core::Block>(it->second);
+            cadino::core::Block after = *bk;
+            *bk = orig;
+            stack_.execute(std::make_unique<cadino::core::ModifyBlockCommand>(sel.id, std::move(after)));
+        } else if (sel.kind == SelectKind::BlockInstance) {
+            auto* bi = document_.find_block_instance(sel.id);
+            if (!bi) continue;
+            const auto& orig = std::get<cadino::core::BlockInstance>(it->second);
+            cadino::core::BlockInstance after = *bi;
+            *bi = orig;
+            stack_.execute(std::make_unique<cadino::core::ModifyBlockInstanceCommand>(sel.id, std::move(after)));
         }
     }
     drag_originals_.clear();
+}
+
+void Viewport3D::capture_drag_originals() {
+    drag_originals_.clear();
+    for (const auto& sel : plan_view_.selections()) {
+        switch (sel.kind) {
+            case SelectKind::Wall:
+                if (const auto* w = document_.find_wall(sel.id))
+                    drag_originals_.emplace(sel.id, *w);
+                break;
+            case SelectKind::Box:
+                if (const auto* b = document_.find_box(sel.id))
+                    drag_originals_.emplace(sel.id, *b);
+                break;
+            case SelectKind::Cylinder:
+                if (const auto* c = document_.find_cylinder(sel.id))
+                    drag_originals_.emplace(sel.id, *c);
+                break;
+            case SelectKind::Block:
+                if (const auto* bk = document_.find_block(sel.id))
+                    drag_originals_.emplace(sel.id, *bk);
+                break;
+            case SelectKind::BlockInstance:
+                if (const auto* bi = document_.find_block_instance(sel.id))
+                    drag_originals_.emplace(sel.id, *bi);
+                break;
+            default: break;
+        }
+    }
+}
+
+void Viewport3D::apply_drag_delta(const QVector3D& delta) {
+    for (const auto& sel : plan_view_.selections()) {
+        const auto it = drag_originals_.find(sel.id);
+        if (it == drag_originals_.end()) continue;
+        switch (sel.kind) {
+            case SelectKind::Wall: {
+                auto* w = document_.find_wall(sel.id);
+                if (!w) break;
+                const auto& orig = std::get<cadino::core::Wall>(it->second);
+                w->start = orig.start + Eigen::Vector2d{delta.x(), delta.y()};
+                w->end = orig.end + Eigen::Vector2d{delta.x(), delta.y()};
+                break;
+            }
+            case SelectKind::Box: {
+                auto* b = document_.find_box(sel.id);
+                if (!b) break;
+                const auto& orig = std::get<cadino::core::Box>(it->second);
+                b->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
+                b->base_z = orig.base_z + delta.z();
+                break;
+            }
+            case SelectKind::Cylinder: {
+                auto* c = document_.find_cylinder(sel.id);
+                if (!c) break;
+                const auto& orig = std::get<cadino::core::Cylinder>(it->second);
+                c->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
+                c->base_z = orig.base_z + delta.z();
+                break;
+            }
+            case SelectKind::Block: {
+                auto* bk = document_.find_block(sel.id);
+                if (!bk) break;
+                const auto& orig = std::get<cadino::core::Block>(it->second);
+                bk->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
+                bk->base_z = orig.base_z + delta.z();
+                break;
+            }
+            case SelectKind::BlockInstance: {
+                auto* bi = document_.find_block_instance(sel.id);
+                if (!bi) break;
+                const auto& orig = std::get<cadino::core::BlockInstance>(it->second);
+                bi->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
+                bi->base_z = orig.base_z + delta.z();
+                break;
+            }
+            default: break;
+        }
+    }
+}
+
+bool Viewport3D::selection_centroid(QVector3D& out) const {
+    const auto& sels = plan_view_.selections();
+    if (sels.empty()) return false;
+    QVector3D sum;
+    int n = 0;
+    for (const auto& sel : sels) {
+        QVector3D c;
+        bool ok = false;
+        switch (sel.kind) {
+            case SelectKind::Wall:
+                if (auto* w = document_.find_wall(sel.id)) {
+                    c = QVector3D(static_cast<float>((w->start.x() + w->end.x()) * 0.5),
+                                  static_cast<float>((w->start.y() + w->end.y()) * 0.5),
+                                  static_cast<float>(w->height * 0.5));
+                    ok = true;
+                }
+                break;
+            case SelectKind::Box:
+                if (auto* b = document_.find_box(sel.id)) {
+                    c = QVector3D(static_cast<float>(b->position.x()),
+                                  static_cast<float>(b->position.y()),
+                                  static_cast<float>(b->base_z + b->height * 0.5));
+                    ok = true;
+                }
+                break;
+            case SelectKind::Cylinder:
+                if (auto* cy = document_.find_cylinder(sel.id)) {
+                    c = QVector3D(static_cast<float>(cy->position.x()),
+                                  static_cast<float>(cy->position.y()),
+                                  static_cast<float>(cy->base_z + cy->height * 0.5));
+                    ok = true;
+                }
+                break;
+            case SelectKind::Block:
+                if (auto* bk = document_.find_block(sel.id)) {
+                    c = QVector3D(static_cast<float>(bk->position.x()),
+                                  static_cast<float>(bk->position.y()),
+                                  static_cast<float>(bk->base_z));
+                    ok = true;
+                }
+                break;
+            case SelectKind::BlockInstance:
+                if (auto* bi = document_.find_block_instance(sel.id)) {
+                    c = QVector3D(static_cast<float>(bi->position.x()),
+                                  static_cast<float>(bi->position.y()),
+                                  static_cast<float>(bi->base_z));
+                    ok = true;
+                }
+                break;
+            default: break;
+        }
+        if (ok) {
+            sum += c;
+            ++n;
+        }
+    }
+    if (n == 0) return false;
+    out = sum / static_cast<float>(n);
+    return true;
+}
+
+float Viewport3D::gizmo_length() const {
+    const float h = static_cast<float>(std::max(1, height()));
+    if (preset_ == CameraPreset::Iso) {
+        const float dist = (eye_position() - gizmo_pivot_).length();
+        const float fov = 50.0f * static_cast<float>(std::numbers::pi) / 180.0f;
+        const float world_per_px = 2.0f * std::tan(fov * 0.5f) * dist / h;
+        return world_per_px * 80.0f;
+    }
+    return (camera_distance_ / h) * 80.0f;
+}
+
+QVector3D Viewport3D::axis_direction(GizmoAxis a) const {
+    switch (a) {
+        case GizmoAxis::X: return {1.0f, 0.0f, 0.0f};
+        case GizmoAxis::Y: return {0.0f, 1.0f, 0.0f};
+        case GizmoAxis::Z: return {0.0f, 0.0f, 1.0f};
+        default: return {};
+    }
+}
+
+bool Viewport3D::axis_param(const Ray& r, const QVector3D& pivot,
+                            const QVector3D& axis, float& s_out) const {
+    const QVector3D w = r.origin - pivot;
+    const float b = QVector3D::dotProduct(r.direction, axis);
+    const float denom = 1.0f - b * b;
+    if (std::abs(denom) < 1e-4f) return false;
+    const float d = QVector3D::dotProduct(r.direction, w);
+    const float e = QVector3D::dotProduct(axis, w);
+    s_out = (e - b * d) / denom;
+    return true;
+}
+
+Viewport3D::GizmoAxis Viewport3D::pick_gizmo_axis(QPointF screen_pos) const {
+    QVector3D pivot;
+    if (!selection_centroid(pivot)) return GizmoAxis::None;
+
+    const QMatrix4x4 vp = projection_matrix() * view_matrix();
+    auto project = [&](const QVector3D& world) -> QPointF {
+        QVector4D clip = vp * QVector4D(world.x(), world.y(), world.z(), 1.0f);
+        if (clip.w() < 1e-4f) return {-1e6f, -1e6f};
+        clip /= clip.w();
+        const float sx = (clip.x() + 1.0f) * 0.5f * static_cast<float>(width());
+        const float sy = (1.0f - clip.y()) * 0.5f * static_cast<float>(height());
+        return {sx, sy};
+    };
+    auto seg_dist = [](QPointF p, QPointF a, QPointF b) {
+        const QPointF ab = b - a;
+        const float ll = static_cast<float>(ab.x() * ab.x() + ab.y() * ab.y());
+        if (ll < 1e-6f) {
+            const QPointF d = p - a;
+            return static_cast<float>(std::hypot(d.x(), d.y()));
+        }
+        const QPointF ap = p - a;
+        float t = static_cast<float>((ap.x() * ab.x() + ap.y() * ab.y()) / ll);
+        t = std::clamp(t, 0.0f, 1.0f);
+        const QPointF q = a + ab * t;
+        const QPointF d = p - q;
+        return static_cast<float>(std::hypot(d.x(), d.y()));
+    };
+
+    const float len = gizmo_length();
+    const QPointF p0 = project(pivot);
+    const QPointF px = project(pivot + QVector3D(len, 0, 0));
+    const QPointF py = project(pivot + QVector3D(0, len, 0));
+    const QPointF pz = project(pivot + QVector3D(0, 0, len));
+
+    constexpr float kHit = 9.0f;  // pixels
+    GizmoAxis best = GizmoAxis::None;
+    float best_d = kHit;
+    const float dx = seg_dist(screen_pos, p0, px);
+    const float dy = seg_dist(screen_pos, p0, py);
+    const float dz = seg_dist(screen_pos, p0, pz);
+    if (dx < best_d) { best_d = dx; best = GizmoAxis::X; }
+    if (dy < best_d) { best_d = dy; best = GizmoAxis::Y; }
+    if (dz < best_d) { best_d = dz; best = GizmoAxis::Z; }
+    return best;
+}
+
+void Viewport3D::render_gizmo() {
+    QVector3D pivot;
+    if (!selection_centroid(pivot)) return;
+    gizmo_pivot_ = pivot;
+    const float len = gizmo_length();
+
+    auto vert = [](QVector3D p, QVector3D color) {
+        return Vertex{p.x(), p.y(), p.z(), 0.0f, 0.0f, 1.0f,
+                      color.x(), color.y(), color.z(),
+                      1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    };
+    auto push_axis = [&](std::vector<Vertex>& v, QVector3D dir, QVector3D color, bool active) {
+        const QVector3D tip = pivot + dir * len;
+        const QVector3D c = active ? QVector3D(1.0f, 0.95f, 0.20f) : color;
+        v.push_back(vert(pivot, c));
+        v.push_back(vert(tip, c));
+        // arrowhead: short crossbar at tip perpendicular to axis
+        const QVector3D perp1 =
+            std::abs(dir.z()) < 0.9f ? QVector3D::crossProduct(dir, {0, 0, 1}).normalized()
+                                     : QVector3D{1, 0, 0};
+        const QVector3D perp2 = QVector3D::crossProduct(dir, perp1).normalized();
+        const float head = len * 0.18f;
+        const QVector3D base = tip - dir * head;
+        const QVector3D h1 = base + perp1 * (head * 0.5f);
+        const QVector3D h2 = base - perp1 * (head * 0.5f);
+        const QVector3D h3 = base + perp2 * (head * 0.5f);
+        const QVector3D h4 = base - perp2 * (head * 0.5f);
+        v.push_back(vert(tip, c)); v.push_back(vert(h1, c));
+        v.push_back(vert(tip, c)); v.push_back(vert(h2, c));
+        v.push_back(vert(tip, c)); v.push_back(vert(h3, c));
+        v.push_back(vert(tip, c)); v.push_back(vert(h4, c));
+    };
+
+    std::vector<Vertex> verts;
+    verts.reserve(30);
+    push_axis(verts, {1, 0, 0}, {0.95f, 0.25f, 0.25f}, active_axis_ == GizmoAxis::X);
+    push_axis(verts, {0, 1, 0}, {0.25f, 0.90f, 0.30f}, active_axis_ == GizmoAxis::Y);
+    push_axis(verts, {0, 0, 1}, {0.25f, 0.45f, 0.95f}, active_axis_ == GizmoAxis::Z);
+
+    gizmo_vao_.bind();
+    gizmo_vbo_.bind();
+    gizmo_vbo_.allocate(verts.data(), static_cast<int>(verts.size() * sizeof(Vertex)));
+    program_->setAttributeBuffer(0, GL_FLOAT, 0, 3, sizeof(Vertex));
+    program_->enableAttributeArray(0);
+    program_->setAttributeBuffer(1, GL_FLOAT, sizeof(float) * 3, 3, sizeof(Vertex));
+    program_->enableAttributeArray(1);
+    program_->setAttributeBuffer(2, GL_FLOAT, sizeof(float) * 6, 3, sizeof(Vertex));
+    program_->enableAttributeArray(2);
+    program_->setAttributeBuffer(3, GL_FLOAT, sizeof(float) * 9, 2, sizeof(Vertex));
+    program_->enableAttributeArray(3);
+    program_->setAttributeBuffer(4, GL_FLOAT, sizeof(float) * 11, 3, sizeof(Vertex));
+    program_->enableAttributeArray(4);
+    gizmo_vbo_.release();
+
+    QMatrix4x4 identity;
+    program_->setUniformValue("u_model", identity);
+    program_->setUniformValue("u_shadow_mode", 2);
+    program_->setUniformValue("u_has_texture", 0);
+
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(3.0f);
+    glDrawArrays(GL_LINES, 0, static_cast<int>(verts.size()));
+    glEnable(GL_DEPTH_TEST);
+    glLineWidth(1.0f);
+    gizmo_vao_.release();
 }
 
 void Viewport3D::mousePressEvent(QMouseEvent* event) {
@@ -1048,6 +1436,27 @@ void Viewport3D::mousePressEvent(QMouseEvent* event) {
     drag_last_ = event->position();
 
     if (event->button() == Qt::LeftButton) {
+        // Gizmo first: if a selection exists and the click lands on an axis,
+        // start an axis-constrained drag and bypass entity picking.
+        const GizmoAxis axis = pick_gizmo_axis(event->position());
+        if (axis != GizmoAxis::None) {
+            active_axis_ = axis;
+            gizmo_axis_dir_ = axis_direction(axis);
+            QVector3D centroid;
+            if (selection_centroid(centroid)) gizmo_pivot_ = centroid;
+            float s0;
+            if (axis_param(ray_from_screen(event->position()), gizmo_pivot_,
+                           gizmo_axis_dir_, s0)) {
+                drag_axis_s0_ = s0;
+            } else {
+                drag_axis_s0_ = 0.0f;
+            }
+            entity_dragging_ = true;
+            capture_drag_originals();
+            update();
+            return;
+        }
+
         const Selection hit = pick_at_screen(event->position());
         const bool shift = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
         if (hit.valid()) {
@@ -1057,23 +1466,12 @@ void Viewport3D::mousePressEvent(QMouseEvent* event) {
                 plan_view_.set_selections({hit});
             }
             entity_dragging_ = true;
+            active_axis_ = GizmoAxis::None;
             QVector3D ground;
             if (ray_ground_intersection(ray_from_screen(event->position()), ground)) {
                 drag_ground_start_ = ground;
             }
-            drag_originals_.clear();
-            for (const auto& sel : plan_view_.selections()) {
-                if (sel.kind == SelectKind::Wall) {
-                    if (const auto* w = document_.find_wall(sel.id))
-                        drag_originals_.emplace(sel.id, *w);
-                } else if (sel.kind == SelectKind::Box) {
-                    if (const auto* b = document_.find_box(sel.id))
-                        drag_originals_.emplace(sel.id, *b);
-                } else if (sel.kind == SelectKind::Cylinder) {
-                    if (const auto* c = document_.find_cylinder(sel.id))
-                        drag_originals_.emplace(sel.id, *c);
-                }
-            }
+            capture_drag_originals();
             update();
             return;
         }
@@ -1083,31 +1481,23 @@ void Viewport3D::mousePressEvent(QMouseEvent* event) {
 }
 
 void Viewport3D::mouseMoveEvent(QMouseEvent* event) {
+    if (entity_dragging_ && active_axis_ != GizmoAxis::None) {
+        float s_now;
+        if (axis_param(ray_from_screen(event->position()), gizmo_pivot_,
+                       gizmo_axis_dir_, s_now)) {
+            const QVector3D delta = gizmo_axis_dir_ * (s_now - drag_axis_s0_);
+            apply_drag_delta(delta);
+            update();
+            plan_view_.update();
+        }
+        return;
+    }
+
     if (entity_dragging_) {
         QVector3D ground_now;
         if (ray_ground_intersection(ray_from_screen(event->position()), ground_now)) {
             const QVector3D delta = ground_now - drag_ground_start_;
-            for (const auto& sel : plan_view_.selections()) {
-                const auto it = drag_originals_.find(sel.id);
-                if (it == drag_originals_.end()) continue;
-                if (sel.kind == SelectKind::Wall) {
-                    auto* w = document_.find_wall(sel.id);
-                    if (!w) continue;
-                    const auto& orig = std::get<cadino::core::Wall>(it->second);
-                    w->start = orig.start + Eigen::Vector2d{delta.x(), delta.y()};
-                    w->end = orig.end + Eigen::Vector2d{delta.x(), delta.y()};
-                } else if (sel.kind == SelectKind::Box) {
-                    auto* b = document_.find_box(sel.id);
-                    if (!b) continue;
-                    const auto& orig = std::get<cadino::core::Box>(it->second);
-                    b->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
-                } else if (sel.kind == SelectKind::Cylinder) {
-                    auto* c = document_.find_cylinder(sel.id);
-                    if (!c) continue;
-                    const auto& orig = std::get<cadino::core::Cylinder>(it->second);
-                    c->position = orig.position + Eigen::Vector2d{delta.x(), delta.y()};
-                }
-            }
+            apply_drag_delta(QVector3D(delta.x(), delta.y(), 0.0f));
             update();
             plan_view_.update();
         }
@@ -1137,6 +1527,7 @@ void Viewport3D::mouseMoveEvent(QMouseEvent* event) {
 void Viewport3D::mouseReleaseEvent(QMouseEvent*) {
     if (entity_dragging_) {
         entity_dragging_ = false;
+        active_axis_ = GizmoAxis::None;
         if (!drag_originals_.empty()) {
             emit_drag_commands();
             plan_view_.notify_document_modified();
