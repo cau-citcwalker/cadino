@@ -17,6 +17,7 @@ enum class SnapKind {
     Center,
     Intersection,
     Perpendicular,
+    Nearest,
 };
 
 struct SnapResult {
@@ -38,6 +39,7 @@ public:
     void set_center_enabled(bool on) noexcept { center_enabled_ = on; }
     void set_intersection_enabled(bool on) noexcept { intersection_enabled_ = on; }
     void set_perpendicular_enabled(bool on) noexcept { perpendicular_enabled_ = on; }
+    void set_nearest_enabled(bool on) noexcept { nearest_enabled_ = on; }
 
     [[nodiscard]] bool grid_enabled() const noexcept { return grid_enabled_; }
     [[nodiscard]] bool endpoint_enabled() const noexcept { return endpoint_enabled_; }
@@ -46,6 +48,7 @@ public:
     [[nodiscard]] bool center_enabled() const noexcept { return center_enabled_; }
     [[nodiscard]] bool intersection_enabled() const noexcept { return intersection_enabled_; }
     [[nodiscard]] bool perpendicular_enabled() const noexcept { return perpendicular_enabled_; }
+    [[nodiscard]] bool nearest_enabled() const noexcept { return nearest_enabled_; }
 
     [[nodiscard]] SnapResult snap(QPointF model_pos,
                                   const cadino::core::Document& doc,
@@ -60,6 +63,7 @@ private:
     bool center_enabled_{true};
     bool intersection_enabled_{true};
     bool perpendicular_enabled_{true};
+    bool nearest_enabled_{true};
 };
 
 }  // namespace cadino::ui

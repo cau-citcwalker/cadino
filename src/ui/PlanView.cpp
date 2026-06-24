@@ -244,6 +244,7 @@ void PlanView::draw_snap_marker(QPainter& p) {
         case SnapKind::Center:        color = QColor(200, 100, 200); break;
         case SnapKind::Intersection:  color = QColor(60, 200, 220); break;
         case SnapKind::Perpendicular: color = QColor(160, 200, 80); break;
+        case SnapKind::Nearest:       color = QColor(245, 175, 60); break;
         case SnapKind::Grid:          color = QColor(120, 120, 200); break;
         default: return;
     }
@@ -288,6 +289,14 @@ void PlanView::draw_snap_marker(QPainter& p) {
             p.drawPolyline(poly);
             p.drawLine(QPointF(s.x() - r, s.y()), QPointF(s.x(), s.y()));
             p.drawLine(QPointF(s.x(), s.y()), QPointF(s.x(), s.y() - r));
+            break;
+        }
+        case SnapKind::Nearest: {
+            QPolygonF hg;
+            hg << QPointF(s.x() - r, s.y() + r * 0.4)
+               << QPointF(s.x(),     s.y() - r * 0.6)
+               << QPointF(s.x() + r, s.y() + r * 0.4);
+            p.drawPolyline(hg);
             break;
         }
         case SnapKind::Grid:

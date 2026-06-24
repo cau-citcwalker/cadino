@@ -127,11 +127,14 @@ SnapResult SnapEngine::snap(QPointF model_pos,
             consider({c.position.x(), c.position.y()}, SnapKind::Endpoint);
         }
         for (const auto& [id, curve] : doc.curves()) {
-            if (curve.control_points.empty()) continue;
-            const auto& f = curve.control_points.front();
-            const auto& b = curve.control_points.back();
-            consider({f.x(), f.y()}, SnapKind::Endpoint);
-            consider({b.x(), b.y()}, SnapKind::Endpoint);
+            for (const auto& cp : curve.control_points) {
+                consider({cp.x(), cp.y()}, SnapKind::Endpoint);
+            }
+        }
+        for (const auto& [id, surf] : doc.surfaces()) {
+            for (const auto& cp : surf.control_points) {
+                consider({cp.x(), cp.y()}, SnapKind::Endpoint);
+            }
         }
         for (const auto& [id, d] : doc.dimensions()) {
             consider({d.start.x(), d.start.y()}, SnapKind::Endpoint);
@@ -196,6 +199,33 @@ SnapResult SnapEngine::snap(QPointF model_pos,
                 const auto p = segment_intersection(segments[i].a, segments[i].b,
                                                     segments[j].a, segments[j].b);
                 if (p) consider(*p, SnapKind::Intersection);
+            }
+        }
+    }
+
+    if (nearest_enabled_) {
+        // Cylinder perimeters — the closest point on the circle to model_pos.
+        for (const auto& [id, c] : doc.cylinders()) {
+            const QPointF center(c.position.x(), c.position.y());
+            const double dx = model_pos.x() - center.x();
+            const double dy = model_pos.y() - center.y();
+            const double mag = std::hypot(dx, dy);
+            if (mag < 1e-9) continue;
+            const QPointF on_circle(center.x() + dx * c.radius / mag,
+                                    center.y() + dy * c.radius / mag);
+            consider(on_circle, SnapKind::Nearest);
+        }
+
+        // NURBS curves — sample then closest point on each segment.
+        for (const auto& [id, curve] : doc.curves()) {
+            const auto samples = curve.tessellate(96);
+            for (std::size_t i = 1; i < samples.size(); ++i) {
+                const QPointF a(samples[i - 1].x(), samples[i - 1].y());
+                const QPointF b(samples[i].x(), samples[i].y());
+                const double t = project_onto_line(model_pos, a, b);
+                if (t < 0.0 || t > 1.0) continue;
+                consider({a.x() + t * (b.x() - a.x()),
+                          a.y() + t * (b.y() - a.y())}, SnapKind::Nearest);
             }
         }
     }
