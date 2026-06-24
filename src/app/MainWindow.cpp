@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QTimer>
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -71,7 +72,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             &cadino::ui::PropertiesPanel::refresh);
 
     activate_select_tool();
-    set_view_mode(ViewMode::Split);
+    // Defer the initial mode switch until after Qt finishes the first window
+    // layout. Calling set_view_mode (which toggles widget visibility) during
+    // construction races with the QSplitter measure pass and leaves both
+    // viewports stuck at 0 size.
+    QTimer::singleShot(0, this, [this] { set_view_mode(ViewMode::Split); });
     statusBar()->showMessage("Ready");
     spdlog::info("MainWindow ready");
 }
@@ -119,19 +124,16 @@ void MainWindow::build_central_widget() {
     top_row_->addWidget(viewport_3d_);
     top_row_->setStretchFactor(0, 1);
     top_row_->setStretchFactor(1, 1);
-    top_row_->setSizes({600, 600});
 
     bottom_row_->addWidget(front_view_);
     bottom_row_->addWidget(side_view_);
     bottom_row_->setStretchFactor(0, 1);
     bottom_row_->setStretchFactor(1, 1);
-    bottom_row_->setSizes({600, 600});
 
     splitter_->addWidget(top_row_);
     splitter_->addWidget(bottom_row_);
     splitter_->setStretchFactor(0, 1);
     splitter_->setStretchFactor(1, 1);
-    splitter_->setSizes({400, 400});
 
     setCentralWidget(splitter_);
 }
@@ -496,13 +498,31 @@ void MainWindow::set_view_mode(ViewMode mode) {
     top_row_->setVisible(plan_view_->isVisible() || viewport_3d_->isVisible());
     bottom_row_->setVisible(front_view_->isVisible() || side_view_->isVisible());
 
+    // Read sizes from the splitter (the only widget whose extent doesn't
+    // collapse to 0 when its sub-rows hide). Reading top_row_->width() etc.
+    // is unsafe across consecutive mode switches because the previous
+    // setSizes call's layout pass may still be pending.
+    const int splitter_h = std::max(splitter_->height(), 600);
+    const int row_w = std::max(splitter_->width(), 800);
     if (mode == ViewMode::Quad) {
-        splitter_->setSizes({400, 400});
-        top_row_->setSizes({600, 600});
-        bottom_row_->setSizes({600, 600});
+        splitter_->setSizes({splitter_h / 2, splitter_h / 2});
+        top_row_->setSizes({row_w / 2, row_w / 2});
+        bottom_row_->setSizes({row_w / 2, row_w / 2});
     } else if (mode == ViewMode::Split) {
-        splitter_->setSizes({800, 0});
-        top_row_->setSizes({600, 600});
+        splitter_->setSizes({splitter_h, 0});
+        top_row_->setSizes({row_w / 2, row_w / 2});
+    } else if (mode == ViewMode::PlanOnly) {
+        splitter_->setSizes({splitter_h, 0});
+        top_row_->setSizes({row_w, 0});
+    } else if (mode == ViewMode::IsoOnly) {
+        splitter_->setSizes({splitter_h, 0});
+        top_row_->setSizes({0, row_w});
+    } else if (mode == ViewMode::FrontOnly) {
+        splitter_->setSizes({0, splitter_h});
+        bottom_row_->setSizes({row_w, 0});
+    } else if (mode == ViewMode::SideOnly) {
+        splitter_->setSizes({0, splitter_h});
+        bottom_row_->setSizes({0, row_w});
     }
 }
 
