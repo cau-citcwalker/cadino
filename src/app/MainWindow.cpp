@@ -22,6 +22,7 @@
 
 #include "BooleanOps.hpp"
 #include "BoxTool.hpp"
+#include "Alignment.hpp"
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
 #include "CylinderTool.hpp"
@@ -266,6 +267,32 @@ void MainWindow::build_menu() {
     auto* insert_inst_a = edit_menu->addAction("&Insert Block Instance...");
     insert_inst_a->setShortcut(QKeySequence("Ctrl+Alt+I"));
     connect(insert_inst_a, &QAction::triggered, this, &MainWindow::insert_block_instance);
+
+    auto* align_menu = menuBar()->addMenu("Ali&gn");
+    auto add_align = [&](const QString& label, cadino::ui::AlignMode mode,
+                         const QKeySequence& key = {}) {
+        auto* a = align_menu->addAction(label);
+        if (!key.isEmpty()) a->setShortcut(key);
+        connect(a, &QAction::triggered, this, [this, mode] {
+            const int n = cadino::ui::apply_alignment(
+                document_, stack_, plan_view_->selections(), mode);
+            if (n > 0) {
+                plan_view_->notify_document_modified();
+                statusBar()->showMessage(QString::number(n) + " entities aligned");
+            }
+        });
+    };
+    add_align("Align &Left", cadino::ui::AlignMode::Left, QKeySequence("Ctrl+Shift+L"));
+    add_align("Align &Right", cadino::ui::AlignMode::Right, QKeySequence("Ctrl+Shift+R"));
+    add_align("Align &Top", cadino::ui::AlignMode::Top, QKeySequence("Ctrl+Shift+T"));
+    add_align("Align &Bottom", cadino::ui::AlignMode::Bottom, QKeySequence("Ctrl+Shift+B"));
+    add_align("Center &Horizontal", cadino::ui::AlignMode::CenterH, QKeySequence("Ctrl+Shift+H"));
+    add_align("Center &Vertical", cadino::ui::AlignMode::CenterV, QKeySequence("Ctrl+Shift+V"));
+    align_menu->addSeparator();
+    add_align("Distribute Hori&zontally", cadino::ui::AlignMode::DistributeH,
+              QKeySequence("Ctrl+Alt+H"));
+    add_align("&Distribute Vertically", cadino::ui::AlignMode::DistributeV,
+              QKeySequence("Ctrl+Alt+V"));
 
     auto* view_menu = menuBar()->addMenu("&View");
     mode_plan_action_ = view_menu->addAction("&Plan (Top)");
