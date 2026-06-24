@@ -224,10 +224,13 @@ void PlanView::draw_snap_marker(QPainter& p) {
     const QPointF s = model_to_screen(last_snap_.position);
     QColor color;
     switch (last_snap_.kind) {
-        case SnapKind::Endpoint: color = QColor(220, 80, 80); break;
-        case SnapKind::Midpoint: color = QColor(80, 180, 100); break;
-        case SnapKind::Corner:   color = QColor(220, 160, 60); break;
-        case SnapKind::Grid:     color = QColor(120, 120, 200); break;
+        case SnapKind::Endpoint:      color = QColor(220, 80, 80); break;
+        case SnapKind::Midpoint:      color = QColor(80, 180, 100); break;
+        case SnapKind::Corner:        color = QColor(220, 160, 60); break;
+        case SnapKind::Center:        color = QColor(200, 100, 200); break;
+        case SnapKind::Intersection:  color = QColor(60, 200, 220); break;
+        case SnapKind::Perpendicular: color = QColor(160, 200, 80); break;
+        case SnapKind::Grid:          color = QColor(120, 120, 200); break;
         default: return;
     }
 
@@ -251,6 +254,28 @@ void PlanView::draw_snap_marker(QPainter& p) {
             p.drawLine(s.x() - r, s.y() - r, s.x() + r, s.y() + r);
             p.drawLine(s.x() - r, s.y() + r, s.x() + r, s.y() - r);
             break;
+        case SnapKind::Center:
+            p.drawEllipse(s, r, r);
+            p.drawPoint(s);
+            break;
+        case SnapKind::Intersection:
+            p.drawLine(s.x() - r, s.y(), s.x() + r, s.y());
+            p.drawLine(s.x(), s.y() - r, s.x(), s.y() + r);
+            p.drawLine(s.x() - r * 0.7, s.y() - r * 0.7,
+                       s.x() + r * 0.7, s.y() + r * 0.7);
+            p.drawLine(s.x() - r * 0.7, s.y() + r * 0.7,
+                       s.x() + r * 0.7, s.y() - r * 0.7);
+            break;
+        case SnapKind::Perpendicular: {
+            QPolygonF poly;
+            poly << QPointF(s.x() - r, s.y() + r)
+                 << QPointF(s.x() - r, s.y() - r)
+                 << QPointF(s.x() + r, s.y() - r);
+            p.drawPolyline(poly);
+            p.drawLine(QPointF(s.x() - r, s.y()), QPointF(s.x(), s.y()));
+            p.drawLine(QPointF(s.x(), s.y()), QPointF(s.x(), s.y() - r));
+            break;
+        }
         case SnapKind::Grid:
             p.drawEllipse(s, r - 1, r - 1);
             break;
