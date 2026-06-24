@@ -41,6 +41,7 @@ private:
     void build_for_curve();
     void build_for_block();
     void build_for_block_instance();
+    void build_for_dimension();
     void show_empty(const QString& message);
     void clear_form();
 
@@ -54,6 +55,7 @@ private:
     void commit_curve_edit();
     void commit_block_edit();
     void commit_block_instance_edit();
+    void commit_dimension_edit();
 
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;

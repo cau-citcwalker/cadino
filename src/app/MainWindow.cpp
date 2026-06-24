@@ -22,6 +22,7 @@
 
 #include "BooleanOps.hpp"
 #include "BoxTool.hpp"
+#include "DimensionTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
@@ -41,6 +42,7 @@
 #include "command/BlockInstanceCommands.hpp"
 #include "command/BoxCommands.hpp"
 #include "command/CylinderCommands.hpp"
+#include "command/DimensionCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
 #include "command/NurbsSurfaceCommands.hpp"
 
@@ -363,6 +365,12 @@ void MainWindow::build_toolbar() {
     group->addAction(surface_action_);
     connect(surface_action_, &QAction::triggered, this, &MainWindow::activate_surface_tool);
 
+    dimension_action_ = tools->addAction("Dimension");
+    dimension_action_->setCheckable(true);
+    dimension_action_->setShortcut(QKeySequence("M"));
+    group->addAction(dimension_action_);
+    connect(dimension_action_, &QAction::triggered, this, &MainWindow::activate_dimension_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -449,6 +457,13 @@ void MainWindow::activate_slab_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::SlabTool>());
     if (slab_action_) slab_action_->setChecked(true);
     statusBar()->showMessage("Slab tool — click two opposite corners to create a floor slab");
+}
+
+void MainWindow::activate_dimension_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::DimensionTool>());
+    if (dimension_action_) dimension_action_->setChecked(true);
+    statusBar()->showMessage(
+        "Dimension tool — click two endpoints, then click to position the dimension line (Esc cancels)");
 }
 
 void MainWindow::set_view_mode(ViewMode mode) {
@@ -1059,6 +1074,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::BlockInstance:
                 stack_.execute(std::make_unique<cadino::core::RemoveBlockInstanceCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::Dimension:
+                stack_.execute(std::make_unique<cadino::core::RemoveDimensionCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

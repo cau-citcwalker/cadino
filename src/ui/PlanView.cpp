@@ -12,6 +12,7 @@
 #include "Tool.hpp"
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
+#include "entity/Dimension.hpp"
 
 namespace cadino::ui {
 
@@ -120,6 +121,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_blocks(p);
     draw_block_instances(p);
     draw_surfaces(p);
+    draw_dimensions(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -587,6 +589,83 @@ void PlanView::draw_boxes(QPainter& p) {
         p.drawLine(model_to_screen({b.position.x(), b.position.y()}),
                    model_to_screen(rot(hx, 0.0)));
         p.setPen(box_pen);
+    }
+}
+
+void PlanView::draw_dimensions(QPainter& p) {
+    for (const auto& [id, d] : document_.dimensions()) {
+        const Eigen::Vector2d v = d.end - d.start;
+        const double len = v.norm();
+        if (len < 1e-6) continue;
+        const Eigen::Vector2d unit = v / len;
+        const Eigen::Vector2d normal(-unit.y(), unit.x());
+        const Eigen::Vector2d off = normal * d.offset;
+        const Eigen::Vector2d ds = d.start + off;
+        const Eigen::Vector2d de = d.end + off;
+
+        const QPointF p_s = model_to_screen({d.start.x(), d.start.y()});
+        const QPointF p_e = model_to_screen({d.end.x(), d.end.y()});
+        const QPointF p_ds = model_to_screen({ds.x(), ds.y()});
+        const QPointF p_de = model_to_screen({de.x(), de.y()});
+
+        QPen pen(QColor::fromRgbF(d.color.r, d.color.g, d.color.b), 1.5);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+
+        const Eigen::Vector2d ext_dir = (off.norm() > 1e-6) ? off.normalized() : normal;
+        const QPointF p_ext_s = model_to_screen({d.start.x() + ext_dir.x() * 30.0,
+                                                  d.start.y() + ext_dir.y() * 30.0});
+        const QPointF p_ext_e = model_to_screen({d.end.x() + ext_dir.x() * 30.0,
+                                                  d.end.y() + ext_dir.y() * 30.0});
+        p.drawLine(p_ext_s, p_ds);
+        p.drawLine(p_ext_e, p_de);
+        p.drawLine(p_ds, p_de);
+
+        const double a_scale = d.arrow_size * zoom_;
+        auto arrowhead = [&](QPointF tip, Eigen::Vector2d along) {
+            const Eigen::Vector2d perp(-along.y(), along.x());
+            const QPointF p1(tip.x() + (-along.x() * a_scale + perp.x() * a_scale * 0.4),
+                             tip.y() - (-along.y() * a_scale + perp.y() * a_scale * 0.4));
+            const QPointF p2(tip.x() + (-along.x() * a_scale - perp.x() * a_scale * 0.4),
+                             tip.y() - (-along.y() * a_scale - perp.y() * a_scale * 0.4));
+            QPolygonF tri;
+            tri << tip << p1 << p2;
+            p.setBrush(QColor::fromRgbF(d.color.r, d.color.g, d.color.b));
+            p.drawPolygon(tri);
+            p.setBrush(Qt::NoBrush);
+        };
+        arrowhead(p_ds, unit);
+        arrowhead(p_de, -unit);
+
+        const QString label = d.text_override.empty()
+            ? QString::number(len, 'f', 1) + QStringLiteral(" mm")
+            : QString::fromStdString(d.text_override);
+
+        const QPointF mid_screen((p_ds.x() + p_de.x()) * 0.5,
+                                 (p_ds.y() + p_de.y()) * 0.5);
+        const double yaw = std::atan2(p_de.y() - p_ds.y(), p_de.x() - p_ds.x());
+        double text_deg = yaw * 180.0 / 3.14159265358979323846;
+        // Keep text upright — flip 180° when it would be upside-down.
+        if (text_deg > 90.0 || text_deg < -90.0) text_deg += 180.0;
+
+        QFont font = p.font();
+        font.setPointSizeF(std::max(8.0, d.text_height * zoom_ * 0.6));
+        font.setBold(true);
+        p.setFont(font);
+        p.setPen(QColor::fromRgbF(d.color.r, d.color.g, d.color.b));
+
+        p.save();
+        p.translate(mid_screen);
+        p.rotate(text_deg);
+        const QFontMetrics fm(font);
+        const QSize ts = fm.size(0, label);
+        const QRectF rect(-ts.width() / 2.0, -ts.height() - 4,
+                          static_cast<qreal>(ts.width()),
+                          static_cast<qreal>(ts.height()));
+        p.fillRect(rect.adjusted(-3, -1, 3, 1), QColor(248, 248, 248));
+        p.drawText(rect, Qt::AlignCenter, label);
+        p.restore();
     }
 }
 

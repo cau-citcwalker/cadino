@@ -16,6 +16,7 @@
 #include "command/BoxCommands.hpp"
 #include "command/CommandStack.hpp"
 #include "command/CylinderCommands.hpp"
+#include "command/DimensionCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
@@ -97,6 +98,12 @@ void PropertiesPanel::refresh() {
             return;
         }
         build_for_block_instance();
+    } else if (current_.kind == SelectKind::Dimension) {
+        if (!document_.find_dimension(current_.id)) {
+            show_empty("Dimension no longer exists");
+            return;
+        }
+        build_for_dimension();
     }
 }
 
@@ -653,6 +660,63 @@ void PropertiesPanel::commit_block_instance_edit() {
         return;
     }
     stack_.execute(std::make_unique<cadino::core::ModifyBlockInstanceCommand>(current_.id, after));
+    view_.notify_document_modified();
+}
+
+void PropertiesPanel::build_for_dimension() {
+    const auto* d = document_.find_dimension(current_.id);
+    if (!d) {
+        show_empty("Dimension not found");
+        return;
+    }
+    suppress_commit_ = true;
+    clear_form();
+    empty_label_->setVisible(false);
+    title_->setText("Dimension");
+
+    auto* sx = make_mm_field(d->start.x());
+    auto* sy = make_mm_field(d->start.y());
+    auto* ex = make_mm_field(d->end.x());
+    auto* ey = make_mm_field(d->end.y());
+    auto* off = make_mm_field(d->offset);
+    auto* th = make_mm_field(d->text_height);
+    auto* ah = make_mm_field(d->arrow_size);
+
+    form_->addRow("Length",
+                  new QLabel(QString::number(d->measured_length(), 'f', 1) + " mm", this));
+    form_->addRow("Start X", sx);
+    form_->addRow("Start Y", sy);
+    form_->addRow("End X", ex);
+    form_->addRow("End Y", ey);
+    form_->addRow("Offset", off);
+    form_->addRow("Text height", th);
+    form_->addRow("Arrow size", ah);
+
+    fields_ = {sx, sy, ex, ey, off, th, ah};
+    for (auto* field : fields_) {
+        connect(field, &QDoubleSpinBox::editingFinished, this,
+                &PropertiesPanel::commit_dimension_edit);
+    }
+    suppress_commit_ = false;
+}
+
+void PropertiesPanel::commit_dimension_edit() {
+    if (suppress_commit_ || !current_.valid() || fields_.size() != 7) return;
+    const auto* d = document_.find_dimension(current_.id);
+    if (!d) return;
+
+    cadino::core::Dimension after = *d;
+    after.start = {fields_[0]->value(), fields_[1]->value()};
+    after.end   = {fields_[2]->value(), fields_[3]->value()};
+    after.offset = fields_[4]->value();
+    after.text_height = fields_[5]->value();
+    after.arrow_size = fields_[6]->value();
+
+    if (after.start == d->start && after.end == d->end && after.offset == d->offset &&
+        after.text_height == d->text_height && after.arrow_size == d->arrow_size) {
+        return;
+    }
+    stack_.execute(std::make_unique<cadino::core::ModifyDimensionCommand>(current_.id, after));
     view_.notify_document_modified();
 }
 

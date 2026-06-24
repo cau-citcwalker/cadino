@@ -450,6 +450,36 @@ cadino::core::Slab slab_from(const QJsonObject& o) {
     return s;
 }
 
+QJsonObject to_json(const cadino::core::Dimension& d) {
+    QJsonObject o;
+    o["id"] = qint64(d.id.value);
+    o["group_id"] = qint64(d.group_id.value);
+    o["start"] = vec2_array(d.start.x(), d.start.y());
+    o["end"] = vec2_array(d.end.x(), d.end.y());
+    o["offset"] = d.offset;
+    o["text_override"] = QString::fromStdString(d.text_override);
+    o["color"] = color_array(d.color);
+    o["text_height"] = d.text_height;
+    o["arrow_size"] = d.arrow_size;
+    return o;
+}
+
+cadino::core::Dimension dimension_from(const QJsonObject& o) {
+    cadino::core::Dimension d;
+    d.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    d.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    const auto s = o["start"].toArray();
+    const auto e = o["end"].toArray();
+    if (s.size() >= 2) d.start = {s[0].toDouble(), s[1].toDouble()};
+    if (e.size() >= 2) d.end = {e[0].toDouble(), e[1].toDouble()};
+    d.offset = o["offset"].toDouble(d.offset);
+    d.text_override = o["text_override"].toString().toStdString();
+    if (o.contains("color")) d.color = color_from(o["color"].toArray());
+    d.text_height = o["text_height"].toDouble(d.text_height);
+    d.arrow_size = o["arrow_size"].toDouble(d.arrow_size);
+    return d;
+}
+
 cadino::core::Cylinder cylinder_from(const QJsonObject& o) {
     cadino::core::Cylinder c;
     c.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
@@ -518,6 +548,10 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     QJsonArray block_instances_json;
     for (const auto& [id, i] : doc.block_instances()) block_instances_json.append(to_json(i));
     root["block_instances"] = block_instances_json;
+
+    QJsonArray dims_json;
+    for (const auto& [id, d] : doc.dimensions()) dims_json.append(to_json(d));
+    root["dimensions"] = dims_json;
 
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -607,6 +641,11 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto i = block_instance_from(v.toObject());
         max_id = std::max(max_id, i.id.value);
         loaded.add_block_instance(std::move(i));
+    }
+    for (const auto& v : root["dimensions"].toArray()) {
+        auto d = dimension_from(v.toObject());
+        max_id = std::max(max_id, d.id.value);
+        loaded.add_dimension(std::move(d));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

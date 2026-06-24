@@ -186,6 +186,23 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
             break;
         }
     }
+    for (const auto& [id, dim] : doc.dimensions()) {
+        const double dx = dim.end.x() - dim.start.x();
+        const double dy = dim.end.y() - dim.start.y();
+        const double len = std::hypot(dx, dy);
+        if (len < 1e-6) continue;
+        const double nx = -dy / len;
+        const double ny = dx / len;
+        const QPointF ds(dim.start.x() + nx * dim.offset,
+                         dim.start.y() + ny * dim.offset);
+        const QPointF de(dim.end.x() + nx * dim.offset,
+                         dim.end.y() + ny * dim.offset);
+        const double d = distance_point_to_segment(model_pos, ds, de);
+        if (d <= pick_radius && d < best_dist) {
+            best_dist = d;
+            best = {id, SelectKind::Dimension};
+        }
+    }
     return best;
 }
 

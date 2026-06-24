@@ -8,6 +8,7 @@ add_library(cadino_ui STATIC
     SlabTool.cpp
     NurbsCurveTool.cpp
     NurbsSurfaceTool.cpp
+    DimensionTool.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
     Snap.cpp

@@ -34,6 +34,7 @@ EntityId Document::add_block(Block b)     { return insert_with_id(blocks_,    st
 EntityId Document::add_surface(NurbsSurface s){ return insert_with_id(surfaces_, std::move(s));}
 EntityId Document::add_block_def(BlockDefinition d){ return insert_with_id(block_defs_, std::move(d));}
 EntityId Document::add_block_instance(BlockInstance i){ return insert_with_id(block_instances_, std::move(i));}
+EntityId Document::add_dimension(Dimension d){ return insert_with_id(dimensions_, std::move(d));}
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }
@@ -59,6 +60,8 @@ const BlockDefinition* Document::find_block_def(EntityId id) const { return find
 BlockDefinition*       Document::find_block_def(EntityId id)       { return find_in(block_defs_, id); }
 const BlockInstance*   Document::find_block_instance(EntityId id) const { return find_in(block_instances_, id); }
 BlockInstance*         Document::find_block_instance(EntityId id)       { return find_in(block_instances_, id); }
+const Dimension*       Document::find_dimension(EntityId id) const { return find_in(dimensions_, id); }
+Dimension*             Document::find_dimension(EntityId id)       { return find_in(dimensions_, id); }
 
 bool Document::remove_wall(EntityId id)   { return walls_.erase(id)   > 0; }
 bool Document::remove_door(EntityId id)   { return doors_.erase(id)   > 0; }
@@ -72,5 +75,6 @@ bool Document::remove_block(EntityId id)    { return blocks_.erase(id)    > 0; }
 bool Document::remove_surface(EntityId id)  { return surfaces_.erase(id)  > 0; }
 bool Document::remove_block_def(EntityId id){ return block_defs_.erase(id) > 0; }
 bool Document::remove_block_instance(EntityId id){ return block_instances_.erase(id) > 0; }
+bool Document::remove_dimension(EntityId id){ return dimensions_.erase(id) > 0; }
 
 }  // namespace cadino::core

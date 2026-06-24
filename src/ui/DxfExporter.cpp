@@ -82,6 +82,19 @@ public:
         code(40, r);
     }
 
+    void text(QPointF p, double height, double rotation_deg, const QString& str,
+              const QString& layer = "0") {
+        code(0, QStringLiteral("TEXT"));
+        code(8, layer);
+        code(10, p.x()); code(20, p.y()); code(30, 0.0);
+        code(40, height);
+        code(1, str);
+        code(50, rotation_deg);
+        code(72, 1);  // horizontal align: center
+        code(11, p.x()); code(21, p.y()); code(31, 0.0);
+        code(73, 0);  // vertical align: baseline
+    }
+
 private:
     QTextStream& s_;
 };
@@ -170,6 +183,31 @@ bool export_document_as_dxf(const cadino::core::Document& doc, const QString& pa
         const QPointF p1{cx - ux * win.width * 0.5, cy - uy * win.width * 0.5};
         const QPointF p2{cx + ux * win.width * 0.5, cy + uy * win.width * 0.5};
         dxf.line(p1, p2, "WINDOWS");
+    }
+
+    for (const auto& [id, d] : doc.dimensions()) {
+        const double dx = d.end.x() - d.start.x();
+        const double dy = d.end.y() - d.start.y();
+        const double len = std::hypot(dx, dy);
+        if (len < 1e-6) continue;
+        const double nx = -dy / len;
+        const double ny = dx / len;
+        const QPointF ds{d.start.x() + nx * d.offset, d.start.y() + ny * d.offset};
+        const QPointF de{d.end.x()   + nx * d.offset, d.end.y()   + ny * d.offset};
+        const QPointF wit_a_far{ds.x() + nx * 30.0, ds.y() + ny * 30.0};
+        const QPointF wit_b_far{de.x() + nx * 30.0, de.y() + ny * 30.0};
+        dxf.line({d.start.x(), d.start.y()}, wit_a_far, "DIMENSIONS");
+        dxf.line({d.end.x(),   d.end.y()},   wit_b_far, "DIMENSIONS");
+        dxf.line(ds, de, "DIMENSIONS");
+
+        const QString label = d.text_override.empty()
+            ? QString::number(len, 'f', 1) + QStringLiteral(" mm")
+            : QString::fromStdString(d.text_override);
+        const QPointF mid{(ds.x() + de.x()) * 0.5 + nx * d.text_height * 0.6,
+                          (ds.y() + de.y()) * 0.5 + ny * d.text_height * 0.6};
+        const double rot = std::atan2(dy, dx) * 180.0 / std::numbers::pi;
+        const double upright = (rot > 90.0 || rot < -90.0) ? rot + 180.0 : rot;
+        dxf.text(mid, d.text_height, upright, label, "DIMENSIONS");
     }
 
     dxf.end_entities();

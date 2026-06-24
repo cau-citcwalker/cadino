@@ -12,6 +12,7 @@ add_library(cadino_core STATIC
     command/NurbsSurfaceCommands.cpp
     command/BlockCommands.cpp
     command/BlockInstanceCommands.cpp
+    command/DimensionCommands.cpp
 )
 
 target_include_directories(cadino_core

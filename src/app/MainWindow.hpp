@@ -48,6 +48,7 @@ private:
     void activate_slab_tool();
     void activate_curve_tool();
     void activate_surface_tool();
+    void activate_dimension_tool();
     void delete_selected();
     void group_selected();
     void ungroup_selected();
@@ -95,6 +96,7 @@ private:
     QAction* slab_action_{nullptr};
     QAction* curve_action_{nullptr};
     QAction* surface_action_{nullptr};
+    QAction* dimension_action_{nullptr};
     QAction* mode_plan_action_{nullptr};
     QAction* mode_front_action_{nullptr};
     QAction* mode_side_action_{nullptr};
