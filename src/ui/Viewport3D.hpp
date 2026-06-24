@@ -70,7 +70,7 @@ private:
     [[nodiscard]] Selection pick_at_screen(QPointF screen_pos, float* t_out = nullptr) const;
     void emit_drag_commands();
 
-    enum class GizmoAxis { None, X, Y, Z };
+    enum class GizmoAxis { None, X, Y, Z, RotZ, Scale };
     [[nodiscard]] bool selection_centroid(QVector3D& out) const;
     [[nodiscard]] float gizmo_length() const;
     [[nodiscard]] GizmoAxis pick_gizmo_axis(QPointF screen_pos) const;
@@ -80,6 +80,8 @@ private:
     void render_gizmo();
     void capture_drag_originals();
     void apply_drag_delta(const QVector3D& delta);
+    void apply_drag_rotation_z(double angle);
+    void apply_drag_scale(double factor);
 
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;
@@ -122,6 +124,8 @@ private:
     QVector3D gizmo_pivot_{};
     QVector3D gizmo_axis_dir_{};
     float drag_axis_s0_{0.0f};
+    double drag_rot_angle0_{0.0};
+    double drag_scale_dist0_{0.0};
     using EntitySnapshot = std::variant<cadino::core::Wall, cadino::core::Box,
                                          cadino::core::Cylinder,
                                          cadino::core::Block,
