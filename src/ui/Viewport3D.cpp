@@ -1324,24 +1324,77 @@ float Viewport3D::gizmo_length() const {
 
 QVector3D Viewport3D::axis_direction(GizmoAxis a) const {
     switch (a) {
-        case GizmoAxis::X: return {1.0f, 0.0f, 0.0f};
-        case GizmoAxis::Y: return {0.0f, 1.0f, 0.0f};
-        case GizmoAxis::Z: return {0.0f, 0.0f, 1.0f};
+        case GizmoAxis::X: case GizmoAxis::ScaleX: return {1.0f, 0.0f, 0.0f};
+        case GizmoAxis::Y: case GizmoAxis::ScaleY: return {0.0f, 1.0f, 0.0f};
+        case GizmoAxis::Z: case GizmoAxis::ScaleZ: return {0.0f, 0.0f, 1.0f};
         default: return {};
     }
 }
 
-void Viewport3D::apply_drag_rotation_z(double angle) {
+bool Viewport3D::ray_plane_intersection(const Ray& ray, const QVector3D& pivot,
+                                        const QVector3D& normal,
+                                        QVector3D& hit_out) const {
+    const float denom = QVector3D::dotProduct(ray.direction, normal);
+    if (std::abs(denom) < 1e-6f) return false;
+    const float t = QVector3D::dotProduct(pivot - ray.origin, normal) / denom;
+    if (t < 0.0f) return false;
+    hit_out = ray.origin + ray.direction * t;
+    return true;
+}
+
+double Viewport3D::rotation_angle_for(GizmoAxis axis, QPointF screen_pos, bool* ok) const {
+    if (ok) *ok = false;
+    QVector3D n;
+    switch (axis) {
+        case GizmoAxis::RotX: n = {1, 0, 0}; break;
+        case GizmoAxis::RotY: n = {0, 1, 0}; break;
+        case GizmoAxis::RotZ: n = {0, 0, 1}; break;
+        default: return 0.0;
+    }
+    QVector3D hit;
+    if (!ray_plane_intersection(ray_from_screen(screen_pos), gizmo_pivot_, n, hit)) {
+        return 0.0;
+    }
+    const QVector3D d = hit - gizmo_pivot_;
+    if (ok) *ok = true;
+    switch (axis) {
+        case GizmoAxis::RotX: return std::atan2(d.z(), d.y());
+        case GizmoAxis::RotY: return std::atan2(d.x(), d.z());
+        case GizmoAxis::RotZ: return std::atan2(d.y(), d.x());
+        default: return 0.0;
+    }
+}
+
+void Viewport3D::apply_drag_rotation(GizmoAxis axis, double angle) {
     const double c = std::cos(angle);
     const double s = std::sin(angle);
-    const Eigen::Vector2d pv{gizmo_pivot_.x(), gizmo_pivot_.y()};
-    auto rotate2 = [&](const Eigen::Vector2d& p) {
-        const Eigen::Vector2d d = p - pv;
-        return pv + Eigen::Vector2d{c * d.x() - s * d.y(), s * d.x() + c * d.y()};
+    const Eigen::Vector3d pv{gizmo_pivot_.x(), gizmo_pivot_.y(), gizmo_pivot_.z()};
+    auto rotate3 = [&](Eigen::Vector3d p) {
+        p -= pv;
+        Eigen::Vector3d r = p;
+        switch (axis) {
+            case GizmoAxis::RotX:
+                r.x() = p.x();
+                r.y() = c * p.y() - s * p.z();
+                r.z() = s * p.y() + c * p.z();
+                break;
+            case GizmoAxis::RotY:
+                r.x() = c * p.x() + s * p.z();
+                r.y() = p.y();
+                r.z() = -s * p.x() + c * p.z();
+                break;
+            case GizmoAxis::RotZ:
+                r.x() = c * p.x() - s * p.y();
+                r.y() = s * p.x() + c * p.y();
+                r.z() = p.z();
+                break;
+            default: break;
+        }
+        return pv + r;
     };
-    auto rotate3 = [&](const Eigen::Vector3d& p) {
-        const Eigen::Vector2d r = rotate2({p.x(), p.y()});
-        return Eigen::Vector3d{r.x(), r.y(), p.z()};
+    auto rotate_xy_anchor = [&](const Eigen::Vector2d& pos, double z) {
+        const Eigen::Vector3d r = rotate3({pos.x(), pos.y(), z});
+        return std::pair<Eigen::Vector2d, double>{{r.x(), r.y()}, r.z()};
     };
 
     for (const auto& sel : plan_view_.selections()) {
@@ -1349,55 +1402,70 @@ void Viewport3D::apply_drag_rotation_z(double angle) {
         if (it == drag_originals_.end()) continue;
         switch (sel.kind) {
             case SelectKind::Wall: {
+                if (axis != GizmoAxis::RotZ) break;
                 auto* w = document_.find_wall(sel.id);
                 if (!w) break;
                 const auto& orig = std::get<cadino::core::Wall>(it->second);
-                w->start = rotate2(orig.start);
-                w->end = rotate2(orig.end);
+                auto [s0, z0] = rotate_xy_anchor(orig.start, 0.0);
+                auto [s1, z1] = rotate_xy_anchor(orig.end, 0.0);
+                w->start = s0;
+                w->end = s1;
+                (void)z0; (void)z1;
                 break;
             }
             case SelectKind::Box: {
                 auto* b = document_.find_box(sel.id);
                 if (!b) break;
                 const auto& orig = std::get<cadino::core::Box>(it->second);
-                b->position = rotate2(orig.position);
-                b->rotation_z = orig.rotation_z + angle;
+                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
+                b->position = p;
+                b->base_z = z;
+                if (axis == GizmoAxis::RotZ) b->rotation_z = orig.rotation_z + angle;
                 break;
             }
             case SelectKind::Cylinder: {
                 auto* cy = document_.find_cylinder(sel.id);
                 if (!cy) break;
                 const auto& orig = std::get<cadino::core::Cylinder>(it->second);
-                cy->position = rotate2(orig.position);
+                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
+                cy->position = p;
+                cy->base_z = z;
                 break;
             }
             case SelectKind::Block: {
                 auto* bk = document_.find_block(sel.id);
                 if (!bk) break;
                 const auto& orig = std::get<cadino::core::Block>(it->second);
-                bk->position = rotate2(orig.position);
-                bk->rotation_z = orig.rotation_z + angle;
+                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
+                bk->position = p;
+                bk->base_z = z;
+                if (axis == GizmoAxis::RotZ) bk->rotation_z = orig.rotation_z + angle;
                 break;
             }
             case SelectKind::BlockInstance: {
                 auto* bi = document_.find_block_instance(sel.id);
                 if (!bi) break;
                 const auto& orig = std::get<cadino::core::BlockInstance>(it->second);
-                bi->position = rotate2(orig.position);
-                bi->rotation_z = orig.rotation_z + angle;
+                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
+                bi->position = p;
+                bi->base_z = z;
+                if (axis == GizmoAxis::RotZ) bi->rotation_z = orig.rotation_z + angle;
                 break;
             }
             default: break;
         }
     }
-    (void)rotate3;
 }
 
-void Viewport3D::apply_drag_scale(double factor) {
+void Viewport3D::apply_drag_scale_uniform(double factor) {
     if (factor < 1e-4) factor = 1e-4;
     const Eigen::Vector2d pv{gizmo_pivot_.x(), gizmo_pivot_.y()};
+    const double pz = gizmo_pivot_.z();
     auto scale2 = [&](const Eigen::Vector2d& p) {
         return pv + (p - pv) * factor;
+    };
+    auto scale_z = [&](double z) {
+        return pz + (z - pz) * factor;
     };
 
     for (const auto& sel : plan_view_.selections()) {
@@ -1419,6 +1487,7 @@ void Viewport3D::apply_drag_scale(double factor) {
                 if (!b) break;
                 const auto& orig = std::get<cadino::core::Box>(it->second);
                 b->position = scale2(orig.position);
+                b->base_z = scale_z(orig.base_z);
                 b->size_xy = orig.size_xy * factor;
                 b->height = orig.height * factor;
                 break;
@@ -1428,6 +1497,7 @@ void Viewport3D::apply_drag_scale(double factor) {
                 if (!cy) break;
                 const auto& orig = std::get<cadino::core::Cylinder>(it->second);
                 cy->position = scale2(orig.position);
+                cy->base_z = scale_z(orig.base_z);
                 cy->radius = orig.radius * factor;
                 cy->height = orig.height * factor;
                 break;
@@ -1437,6 +1507,7 @@ void Viewport3D::apply_drag_scale(double factor) {
                 if (!bk) break;
                 const auto& orig = std::get<cadino::core::Block>(it->second);
                 bk->position = scale2(orig.position);
+                bk->base_z = scale_z(orig.base_z);
                 break;
             }
             case SelectKind::BlockInstance: {
@@ -1444,6 +1515,79 @@ void Viewport3D::apply_drag_scale(double factor) {
                 if (!bi) break;
                 const auto& orig = std::get<cadino::core::BlockInstance>(it->second);
                 bi->position = scale2(orig.position);
+                bi->base_z = scale_z(orig.base_z);
+                break;
+            }
+            default: break;
+        }
+    }
+}
+
+void Viewport3D::apply_drag_scale_axis(GizmoAxis axis, double factor) {
+    if (factor < 1e-4) factor = 1e-4;
+    const Eigen::Vector3d pv{gizmo_pivot_.x(), gizmo_pivot_.y(), gizmo_pivot_.z()};
+    auto scale_xyz = [&](Eigen::Vector3d p) {
+        p -= pv;
+        switch (axis) {
+            case GizmoAxis::ScaleX: p.x() *= factor; break;
+            case GizmoAxis::ScaleY: p.y() *= factor; break;
+            case GizmoAxis::ScaleZ: p.z() *= factor; break;
+            default: break;
+        }
+        return pv + p;
+    };
+
+    for (const auto& sel : plan_view_.selections()) {
+        const auto it = drag_originals_.find(sel.id);
+        if (it == drag_originals_.end()) continue;
+        switch (sel.kind) {
+            case SelectKind::Wall: {
+                auto* w = document_.find_wall(sel.id);
+                if (!w) break;
+                const auto& orig = std::get<cadino::core::Wall>(it->second);
+                const Eigen::Vector3d s = scale_xyz({orig.start.x(), orig.start.y(), 0});
+                const Eigen::Vector3d e = scale_xyz({orig.end.x(), orig.end.y(), 0});
+                w->start = {s.x(), s.y()};
+                w->end = {e.x(), e.y()};
+                if (axis == GizmoAxis::ScaleZ) w->height = orig.height * factor;
+                break;
+            }
+            case SelectKind::Box: {
+                auto* b = document_.find_box(sel.id);
+                if (!b) break;
+                const auto& orig = std::get<cadino::core::Box>(it->second);
+                const Eigen::Vector3d p = scale_xyz({orig.position.x(), orig.position.y(), orig.base_z});
+                b->position = {p.x(), p.y()};
+                b->base_z = p.z();
+                if (axis == GizmoAxis::ScaleZ) b->height = orig.height * factor;
+                break;
+            }
+            case SelectKind::Cylinder: {
+                auto* cy = document_.find_cylinder(sel.id);
+                if (!cy) break;
+                const auto& orig = std::get<cadino::core::Cylinder>(it->second);
+                const Eigen::Vector3d p = scale_xyz({orig.position.x(), orig.position.y(), orig.base_z});
+                cy->position = {p.x(), p.y()};
+                cy->base_z = p.z();
+                if (axis == GizmoAxis::ScaleZ) cy->height = orig.height * factor;
+                break;
+            }
+            case SelectKind::Block: {
+                auto* bk = document_.find_block(sel.id);
+                if (!bk) break;
+                const auto& orig = std::get<cadino::core::Block>(it->second);
+                const Eigen::Vector3d p = scale_xyz({orig.position.x(), orig.position.y(), orig.base_z});
+                bk->position = {p.x(), p.y()};
+                bk->base_z = p.z();
+                break;
+            }
+            case SelectKind::BlockInstance: {
+                auto* bi = document_.find_block_instance(sel.id);
+                if (!bi) break;
+                const auto& orig = std::get<cadino::core::BlockInstance>(it->second);
+                const Eigen::Vector3d p = scale_xyz({orig.position.x(), orig.position.y(), orig.base_z});
+                bi->position = {p.x(), p.y()};
+                bi->base_z = p.z();
                 break;
             }
             default: break;
@@ -1507,24 +1651,44 @@ Viewport3D::GizmoAxis Viewport3D::pick_gizmo_axis(QPointF screen_pos) const {
     if (dy < best_d) { best_d = dy; best = GizmoAxis::Y; }
     if (dz < best_d) { best_d = dz; best = GizmoAxis::Z; }
 
-    // Z-rotation ring: sample 48 points around the pivot in the XY plane and
-    // hit-test against the nearest projected screen vertex.
+    // Rotation rings — sample points along the ring in its plane.
     const float ring_r = len * 1.15f;
     constexpr int kRing = 48;
-    for (int i = 0; i < kRing; ++i) {
-        const float a = float(i) / float(kRing) * 6.28318530718f;
-        const QPointF rp = project(pivot + QVector3D(std::cos(a) * ring_r,
-                                                     std::sin(a) * ring_r, 0.0f));
-        const float d = static_cast<float>(std::hypot(screen_pos.x() - rp.x(),
-                                                       screen_pos.y() - rp.y()));
-        if (d < best_d) { best_d = d; best = GizmoAxis::RotZ; }
-    }
+    auto ring_hit_test = [&](GizmoAxis kind, auto point_at) {
+        for (int i = 0; i < kRing; ++i) {
+            const float a = float(i) / float(kRing) * 6.28318530718f;
+            const QPointF rp = project(point_at(a));
+            const float d = static_cast<float>(std::hypot(screen_pos.x() - rp.x(),
+                                                           screen_pos.y() - rp.y()));
+            if (d < best_d) { best_d = d; best = kind; }
+        }
+    };
+    ring_hit_test(GizmoAxis::RotZ, [&](float a) {
+        return pivot + QVector3D(std::cos(a) * ring_r, std::sin(a) * ring_r, 0.0f);
+    });
+    ring_hit_test(GizmoAxis::RotX, [&](float a) {
+        return pivot + QVector3D(0.0f, std::cos(a) * ring_r, std::sin(a) * ring_r);
+    });
+    ring_hit_test(GizmoAxis::RotY, [&](float a) {
+        return pivot + QVector3D(std::sin(a) * ring_r, 0.0f, std::cos(a) * ring_r);
+    });
 
-    // Uniform scale handle: small square above the Z arrow tip.
-    const QPointF sp = project(pivot + QVector3D(0.0f, 0.0f, len * 1.35f));
-    const float ds = static_cast<float>(std::hypot(screen_pos.x() - sp.x(),
-                                                    screen_pos.y() - sp.y()));
-    if (ds < std::max(best_d, 10.0f)) { best = GizmoAxis::Scale; }
+    // Per-axis non-uniform scale handles at the tip-plus of each arrow.
+    auto scale_hit = [&](GizmoAxis kind, QVector3D dir) {
+        const QPointF sp = project(pivot + dir * (len * 1.35f));
+        const float d = static_cast<float>(std::hypot(screen_pos.x() - sp.x(),
+                                                       screen_pos.y() - sp.y()));
+        if (d < std::max(best_d, 11.0f)) { best_d = d; best = kind; }
+    };
+    scale_hit(GizmoAxis::ScaleX, {1.0f, 0.0f, 0.0f});
+    scale_hit(GizmoAxis::ScaleY, {0.0f, 1.0f, 0.0f});
+    scale_hit(GizmoAxis::ScaleZ, {0.0f, 0.0f, 1.0f});
+
+    // Uniform scale handle: small cross at the center.
+    const QPointF up = project(pivot);
+    const float du = static_cast<float>(std::hypot(screen_pos.x() - up.x(),
+                                                    screen_pos.y() - up.y()));
+    if (du < 8.0f && du < best_d) { best = GizmoAxis::ScaleUniform; }
 
     return best;
 }
@@ -1568,36 +1732,59 @@ void Viewport3D::render_gizmo() {
     push_axis(verts, {0, 1, 0}, {0.25f, 0.90f, 0.30f}, active_axis_ == GizmoAxis::Y);
     push_axis(verts, {0, 0, 1}, {0.25f, 0.45f, 0.95f}, active_axis_ == GizmoAxis::Z);
 
-    // Z-rotation ring (cyan / yellow when active).
-    {
-        const QVector3D rc = active_axis_ == GizmoAxis::RotZ
-            ? QVector3D(1.0f, 0.95f, 0.20f)
-            : QVector3D(0.30f, 0.85f, 0.85f);
-        constexpr int kRing = 48;
-        const float rr = len * 1.15f;
-        QVector3D prev = pivot + QVector3D(rr, 0.0f, 0.0f);
+    // Rotation rings — one per axis, lying in the plane orthogonal to that axis.
+    constexpr int kRing = 48;
+    const float rr = len * 1.15f;
+    auto push_ring = [&](GizmoAxis kind, QVector3D base_color, auto point_at) {
+        const QVector3D c = active_axis_ == kind
+            ? QVector3D(1.0f, 0.95f, 0.20f) : base_color;
+        QVector3D prev = point_at(0.0f);
         for (int i = 1; i <= kRing; ++i) {
             const float a = float(i) / float(kRing) * 6.28318530718f;
-            const QVector3D p = pivot + QVector3D(std::cos(a) * rr, std::sin(a) * rr, 0.0f);
-            verts.push_back(vert(prev, rc));
-            verts.push_back(vert(p, rc));
+            const QVector3D p = point_at(a);
+            verts.push_back(vert(prev, c));
+            verts.push_back(vert(p, c));
             prev = p;
         }
-    }
+    };
+    push_ring(GizmoAxis::RotZ, {0.30f, 0.85f, 0.85f}, [&](float a) {
+        return pivot + QVector3D(std::cos(a) * rr, std::sin(a) * rr, 0.0f);
+    });
+    push_ring(GizmoAxis::RotX, {0.95f, 0.45f, 0.45f}, [&](float a) {
+        return pivot + QVector3D(0.0f, std::cos(a) * rr, std::sin(a) * rr);
+    });
+    push_ring(GizmoAxis::RotY, {0.45f, 0.95f, 0.55f}, [&](float a) {
+        return pivot + QVector3D(std::sin(a) * rr, 0.0f, std::cos(a) * rr);
+    });
 
-    // Uniform scale handle: small cross above Z arrow tip.
+    // Per-axis scale handles: a small wireframe cube past each arrow tip.
+    auto push_scale_handle = [&](GizmoAxis kind, QVector3D dir, QVector3D base_color) {
+        const QVector3D c = active_axis_ == kind
+            ? QVector3D(1.0f, 0.95f, 0.20f) : base_color;
+        const QVector3D h = pivot + dir * (len * 1.35f);
+        const float sz = len * 0.10f;
+        verts.push_back(vert(h + QVector3D(-sz, 0, 0), c));
+        verts.push_back(vert(h + QVector3D( sz, 0, 0), c));
+        verts.push_back(vert(h + QVector3D(0, -sz, 0), c));
+        verts.push_back(vert(h + QVector3D(0,  sz, 0), c));
+        verts.push_back(vert(h + QVector3D(0, 0, -sz), c));
+        verts.push_back(vert(h + QVector3D(0, 0,  sz), c));
+    };
+    push_scale_handle(GizmoAxis::ScaleX, {1, 0, 0}, {0.95f, 0.45f, 0.45f});
+    push_scale_handle(GizmoAxis::ScaleY, {0, 1, 0}, {0.45f, 0.95f, 0.55f});
+    push_scale_handle(GizmoAxis::ScaleZ, {0, 0, 1}, {0.55f, 0.65f, 0.95f});
+
+    // Uniform scale handle: small 3D cross at the pivot itself.
     {
-        const QVector3D sc = active_axis_ == GizmoAxis::Scale
-            ? QVector3D(1.0f, 0.95f, 0.20f)
-            : QVector3D(0.95f, 0.75f, 0.30f);
-        const QVector3D h = pivot + QVector3D(0.0f, 0.0f, len * 1.35f);
-        const float sz = len * 0.12f;
-        verts.push_back(vert(h + QVector3D(-sz, 0, 0), sc));
-        verts.push_back(vert(h + QVector3D( sz, 0, 0), sc));
-        verts.push_back(vert(h + QVector3D(0, -sz, 0), sc));
-        verts.push_back(vert(h + QVector3D(0,  sz, 0), sc));
-        verts.push_back(vert(h + QVector3D(0, 0, -sz), sc));
-        verts.push_back(vert(h + QVector3D(0, 0,  sz), sc));
+        const QVector3D c = active_axis_ == GizmoAxis::ScaleUniform
+            ? QVector3D(1.0f, 0.95f, 0.20f) : QVector3D(0.95f, 0.85f, 0.40f);
+        const float sz = len * 0.07f;
+        verts.push_back(vert(pivot + QVector3D(-sz, 0, 0), c));
+        verts.push_back(vert(pivot + QVector3D( sz, 0, 0), c));
+        verts.push_back(vert(pivot + QVector3D(0, -sz, 0), c));
+        verts.push_back(vert(pivot + QVector3D(0,  sz, 0), c));
+        verts.push_back(vert(pivot + QVector3D(0, 0, -sz), c));
+        verts.push_back(vert(pivot + QVector3D(0, 0,  sz), c));
     }
 
     gizmo_vao_.bind();
@@ -1641,23 +1828,43 @@ void Viewport3D::mousePressEvent(QMouseEvent* event) {
             QVector3D centroid;
             if (selection_centroid(centroid)) gizmo_pivot_ = centroid;
             const Ray ray = ray_from_screen(event->position());
-            if (axis == GizmoAxis::RotZ || axis == GizmoAxis::Scale) {
-                QVector3D ground;
-                if (ray_ground_intersection(ray, ground)) {
-                    drag_ground_start_ = ground;
-                    const double dx = ground.x() - gizmo_pivot_.x();
-                    const double dy = ground.y() - gizmo_pivot_.y();
-                    drag_rot_angle0_ = std::atan2(dy, dx);
-                    drag_scale_dist0_ = std::max(std::hypot(dx, dy), 1e-3);
+            switch (axis) {
+                case GizmoAxis::RotX:
+                case GizmoAxis::RotY:
+                case GizmoAxis::RotZ:
+                    drag_rot_angle0_ = rotation_angle_for(axis, event->position());
+                    break;
+                case GizmoAxis::ScaleX:
+                case GizmoAxis::ScaleY:
+                case GizmoAxis::ScaleZ: {
+                    gizmo_axis_dir_ = axis_direction(axis);
+                    float s0 = 0.0f;
+                    axis_param(ray, gizmo_pivot_, gizmo_axis_dir_, s0);
+                    // Keep the signed initial param so the scale factor preserves
+                    // direction even when the user clicks on the negative side.
+                    drag_axis_s0_ = (std::abs(s0) < 1.0f) ? std::copysign(1.0f, s0 == 0 ? 1.0f : s0) : s0;
+                    break;
                 }
-            } else {
-                gizmo_axis_dir_ = axis_direction(axis);
-                float s0;
-                if (axis_param(ray, gizmo_pivot_, gizmo_axis_dir_, s0)) {
+                case GizmoAxis::ScaleUniform: {
+                    QVector3D ground;
+                    if (ray_ground_intersection(ray, ground)) {
+                        const double d = std::hypot(
+                            static_cast<double>(ground.x() - gizmo_pivot_.x()),
+                            static_cast<double>(ground.y() - gizmo_pivot_.y()));
+                        drag_scale_dist0_ = std::max(d, 1.0);
+                    }
+                    break;
+                }
+                case GizmoAxis::X:
+                case GizmoAxis::Y:
+                case GizmoAxis::Z: {
+                    gizmo_axis_dir_ = axis_direction(axis);
+                    float s0 = 0.0f;
+                    axis_param(ray, gizmo_pivot_, gizmo_axis_dir_, s0);
                     drag_axis_s0_ = s0;
-                } else {
-                    drag_axis_s0_ = 0.0f;
+                    break;
                 }
+                default: break;
             }
             entity_dragging_ = true;
             capture_drag_originals();
@@ -1689,23 +1896,38 @@ void Viewport3D::mousePressEvent(QMouseEvent* event) {
 }
 
 void Viewport3D::mouseMoveEvent(QMouseEvent* event) {
-    if (entity_dragging_ && active_axis_ == GizmoAxis::RotZ) {
-        QVector3D ground;
-        if (ray_ground_intersection(ray_from_screen(event->position()), ground)) {
-            const double a = std::atan2(ground.y() - gizmo_pivot_.y(),
-                                        ground.x() - gizmo_pivot_.x());
-            apply_drag_rotation_z(a - drag_rot_angle0_);
+    if (entity_dragging_ &&
+        (active_axis_ == GizmoAxis::RotX || active_axis_ == GizmoAxis::RotY ||
+         active_axis_ == GizmoAxis::RotZ)) {
+        bool ok = false;
+        const double a = rotation_angle_for(active_axis_, event->position(), &ok);
+        if (ok) {
+            apply_drag_rotation(active_axis_, a - drag_rot_angle0_);
             update();
             plan_view_.update();
         }
         return;
     }
-    if (entity_dragging_ && active_axis_ == GizmoAxis::Scale) {
+    if (entity_dragging_ && active_axis_ == GizmoAxis::ScaleUniform) {
         QVector3D ground;
         if (ray_ground_intersection(ray_from_screen(event->position()), ground)) {
             const double d = std::hypot(ground.x() - gizmo_pivot_.x(),
                                         ground.y() - gizmo_pivot_.y());
-            apply_drag_scale(d / drag_scale_dist0_);
+            apply_drag_scale_uniform(d / drag_scale_dist0_);
+            update();
+            plan_view_.update();
+        }
+        return;
+    }
+    if (entity_dragging_ &&
+        (active_axis_ == GizmoAxis::ScaleX || active_axis_ == GizmoAxis::ScaleY ||
+         active_axis_ == GizmoAxis::ScaleZ)) {
+        float s_now = 0.0f;
+        if (axis_param(ray_from_screen(event->position()), gizmo_pivot_,
+                       gizmo_axis_dir_, s_now)) {
+            const double factor = static_cast<double>(s_now) /
+                                  static_cast<double>(drag_axis_s0_);
+            apply_drag_scale_axis(active_axis_, factor);
             update();
             plan_view_.update();
         }

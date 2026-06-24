@@ -70,18 +70,29 @@ private:
     [[nodiscard]] Selection pick_at_screen(QPointF screen_pos, float* t_out = nullptr) const;
     void emit_drag_commands();
 
-    enum class GizmoAxis { None, X, Y, Z, RotZ, Scale };
+    enum class GizmoAxis {
+        None,
+        X, Y, Z,          // translate
+        RotX, RotY, RotZ, // rotate
+        ScaleX, ScaleY, ScaleZ, ScaleUniform,
+    };
     [[nodiscard]] bool selection_centroid(QVector3D& out) const;
     [[nodiscard]] float gizmo_length() const;
     [[nodiscard]] GizmoAxis pick_gizmo_axis(QPointF screen_pos) const;
     [[nodiscard]] QVector3D axis_direction(GizmoAxis a) const;
     [[nodiscard]] bool axis_param(const Ray& ray, const QVector3D& pivot,
                                   const QVector3D& axis, float& s_out) const;
+    [[nodiscard]] bool ray_plane_intersection(const Ray& ray, const QVector3D& pivot,
+                                              const QVector3D& normal,
+                                              QVector3D& hit_out) const;
+    [[nodiscard]] double rotation_angle_for(GizmoAxis axis, QPointF screen_pos,
+                                            bool* ok = nullptr) const;
     void render_gizmo();
     void capture_drag_originals();
     void apply_drag_delta(const QVector3D& delta);
-    void apply_drag_rotation_z(double angle);
-    void apply_drag_scale(double factor);
+    void apply_drag_rotation(GizmoAxis axis, double angle);
+    void apply_drag_scale_uniform(double factor);
+    void apply_drag_scale_axis(GizmoAxis axis, double factor);
 
     cadino::core::Document& document_;
     cadino::core::CommandStack& stack_;
