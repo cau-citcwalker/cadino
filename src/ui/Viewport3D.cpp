@@ -798,7 +798,14 @@ void Viewport3D::paintGL() {
 
     const QMatrix4x4 vp = projection_matrix() * view_matrix();
     program_->setUniformValue("u_view_proj", vp);
-    program_->setUniformValue("u_light_dir", QVector3D(-0.4f, -0.3f, -1.0f));
+    {
+        const float az = sun_azimuth_deg_ * static_cast<float>(std::numbers::pi) / 180.0f;
+        const float al = sun_altitude_deg_ * static_cast<float>(std::numbers::pi) / 180.0f;
+        const QVector3D sun_dir(std::cos(al) * std::cos(az),
+                                std::cos(al) * std::sin(az),
+                                std::sin(al));
+        program_->setUniformValue("u_light_dir", -sun_dir);
+    }
     program_->setUniformValue("u_eye_pos", eye_position());
     program_->setUniformValue("u_section_enabled", section_enabled_ ? 1 : 0);
     program_->setUniformValue("u_section_normal", section_normal_.normalized());
@@ -840,8 +847,13 @@ void Viewport3D::paintGL() {
     }
 
     if (vertex_count_ > 6) {
-        const QVector3D L(-0.4f, -0.3f, -1.0f);
-        const float lz = L.z();
+        const float az = sun_azimuth_deg_ * static_cast<float>(std::numbers::pi) / 180.0f;
+        const float al = sun_altitude_deg_ * static_cast<float>(std::numbers::pi) / 180.0f;
+        const QVector3D sun_dir(std::cos(al) * std::cos(az),
+                                std::cos(al) * std::sin(az),
+                                std::sin(al));
+        const QVector3D L = -sun_dir;
+        const float lz = std::min(L.z(), -0.05f);
         QMatrix4x4 shadow(
             1.0f, 0.0f, -L.x() / lz, 0.0f,
             0.0f, 1.0f, -L.y() / lz, 0.0f,

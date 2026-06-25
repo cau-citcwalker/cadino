@@ -402,6 +402,10 @@ void MainWindow::build_menu() {
             [this] { set_view_mode(ViewMode::Quad); });
 
     view_menu->addSeparator();
+    auto* sun_a = view_menu->addAction("Sun &Position...");
+    sun_a->setShortcut(QKeySequence("Ctrl+Shift+P"));
+    connect(sun_a, &QAction::triggered, this, &MainWindow::show_sun_dialog);
+
     auto* section_menu = view_menu->addMenu("Section");
     auto* section_off = section_menu->addAction("Off");
     connect(section_off, &QAction::triggered, this,
@@ -949,6 +953,42 @@ double slab_area(const cadino::core::Slab& s) {
     return std::abs(area) * 0.5;
 }
 }  // namespace
+
+void MainWindow::show_sun_dialog() {
+    QDialog dlg(this);
+    dlg.setWindowTitle("Sun Position");
+    auto* form = new QFormLayout(&dlg);
+
+    auto* az = new QDoubleSpinBox(&dlg);
+    az->setRange(-360.0, 360.0);
+    az->setSingleStep(5.0);
+    az->setSuffix(" deg");
+    az->setValue(viewport_3d_->sun_azimuth());
+
+    auto* al = new QDoubleSpinBox(&dlg);
+    al->setRange(0.0, 90.0);
+    al->setSingleStep(5.0);
+    al->setSuffix(" deg");
+    al->setValue(viewport_3d_->sun_altitude());
+
+    form->addRow("Azimuth", az);
+    form->addRow("Altitude", al);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+    const float a = static_cast<float>(az->value());
+    const float t = static_cast<float>(al->value());
+    viewport_3d_->set_sun(a, t);
+    if (front_view_) front_view_->set_sun(a, t);
+    if (side_view_)  side_view_->set_sun(a, t);
+    statusBar()->showMessage(
+        QString("Sun: azimuth %1°, altitude %2°").arg(a, 0, 'f', 1).arg(t, 0, 'f', 1));
+}
 
 void MainWindow::set_section_axis(int axis, double position) {
     if (axis < 0) {

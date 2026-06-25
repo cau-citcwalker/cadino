@@ -56,6 +56,14 @@ public:
     }
     [[nodiscard]] bool section_enabled() const noexcept { return section_enabled_; }
 
+    void set_sun(float azimuth_deg, float altitude_deg) {
+        sun_azimuth_deg_ = azimuth_deg;
+        sun_altitude_deg_ = altitude_deg;
+        update();
+    }
+    [[nodiscard]] float sun_azimuth() const noexcept { return sun_azimuth_deg_; }
+    [[nodiscard]] float sun_altitude() const noexcept { return sun_altitude_deg_; }
+
     // Project a world-space point onto current screen pixels. Used by tests
     // to locate gizmo handles for QTest mouse synthesis.
     [[nodiscard]] QPointF world_to_screen(QVector3D world) const;
@@ -145,6 +153,9 @@ private:
     bool section_enabled_{false};
     QVector3D section_normal_{0.0f, 0.0f, 1.0f};
     QVector3D section_point_{0.0f, 0.0f, 1200.0f};
+
+    float sun_azimuth_deg_{45.0f};
+    float sun_altitude_deg_{55.0f};
 
     Qt::MouseButton drag_button_{Qt::NoButton};
     QPointF drag_last_;
