@@ -2,15 +2,20 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTimer>
@@ -23,10 +28,12 @@
 #include "BooleanOps.hpp"
 #include "BoxTool.hpp"
 #include "Alignment.hpp"
+#include "Array.hpp"
 #include "Clipboard.hpp"
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
 #include "MirrorTool.hpp"
+#include "PolarArrayTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
@@ -292,6 +299,14 @@ void MainWindow::build_menu() {
     mirror_a->setShortcut(QKeySequence("Ctrl+M"));
     connect(mirror_a, &QAction::triggered, this, &MainWindow::activate_mirror_tool);
 
+    auto* rect_array_a = edit_menu->addAction("Re&ctangular Array...");
+    rect_array_a->setShortcut(QKeySequence("Ctrl+Alt+R"));
+    connect(rect_array_a, &QAction::triggered, this, &MainWindow::rectangular_array_dialog);
+
+    auto* polar_array_a = edit_menu->addAction("Po&lar Array...");
+    polar_array_a->setShortcut(QKeySequence("Ctrl+Alt+P"));
+    connect(polar_array_a, &QAction::triggered, this, &MainWindow::polar_array_dialog);
+
     auto* align_menu = menuBar()->addMenu("Ali&gn");
     auto add_align = [&](const QString& label, cadino::ui::AlignMode mode,
                          const QKeySequence& key = {}) {
@@ -535,6 +550,78 @@ void MainWindow::activate_mirror_tool() {
             "Mirror — click two points to define the axis (Shift on the 2nd click = move-mirror, Esc cancels)");
     }
     plan_view_->set_tool(std::make_unique<cadino::ui::MirrorTool>());
+}
+
+void MainWindow::rectangular_array_dialog() {
+    if (plan_view_->selections().empty()) {
+        statusBar()->showMessage("Rectangular array — select entities first");
+        return;
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Rectangular Array");
+    auto* form = new QFormLayout(&dlg);
+
+    auto* rows = new QSpinBox(&dlg); rows->setRange(1, 200); rows->setValue(2);
+    auto* cols = new QSpinBox(&dlg); cols->setRange(1, 200); cols->setValue(3);
+    auto* dx = new QDoubleSpinBox(&dlg);
+    dx->setRange(-1'000'000.0, 1'000'000.0); dx->setDecimals(1);
+    dx->setSingleStep(100.0); dx->setSuffix(" mm"); dx->setValue(1000.0);
+    auto* dy = new QDoubleSpinBox(&dlg);
+    dy->setRange(-1'000'000.0, 1'000'000.0); dy->setDecimals(1);
+    dy->setSingleStep(100.0); dy->setSuffix(" mm"); dy->setValue(1000.0);
+
+    form->addRow("Rows (Y)", rows);
+    form->addRow("Cols (X)", cols);
+    form->addRow("X spacing", dx);
+    form->addRow("Y spacing", dy);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    const int n = cadino::ui::rectangular_array(
+        document_, stack_, plan_view_->selections(),
+        rows->value(), cols->value(), dx->value(), dy->value());
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Rectangular array created %1 copies").arg(n));
+}
+
+void MainWindow::polar_array_dialog() {
+    if (plan_view_->selections().empty()) {
+        statusBar()->showMessage("Polar array — select entities first");
+        return;
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Polar Array");
+    auto* form = new QFormLayout(&dlg);
+
+    auto* count = new QSpinBox(&dlg); count->setRange(2, 360); count->setValue(6);
+    auto* sweep = new QDoubleSpinBox(&dlg);
+    sweep->setRange(-360.0, 360.0); sweep->setDecimals(1);
+    sweep->setSingleStep(15.0); sweep->setSuffix(" deg"); sweep->setValue(360.0);
+
+    form->addRow("Total count", count);
+    form->addRow("Sweep angle", sweep);
+    form->addRow(new QLabel("After OK: click in the plan view to set the rotation centre."));
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    const double sweep_rad = sweep->value() * 3.14159265358979323846 / 180.0;
+    plan_view_->set_tool(std::make_unique<cadino::ui::PolarArrayTool>(
+        count->value(), sweep_rad));
+    statusBar()->showMessage("Polar array — click the rotation centre in the plan view");
 }
 
 void MainWindow::set_view_mode(ViewMode mode) {
