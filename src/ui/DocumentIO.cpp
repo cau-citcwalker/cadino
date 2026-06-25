@@ -506,6 +506,40 @@ QJsonObject to_json(const cadino::core::Dimension& d) {
     return o;
 }
 
+QJsonObject to_json(const cadino::core::RadialDimension& r) {
+    QJsonObject o;
+    o["id"] = qint64(r.id.value);
+    o["group_id"] = qint64(r.group_id.value);
+    o["layer_id"] = qint64(r.layer_id.value);
+    o["center"] = vec2_array(r.center.x(), r.center.y());
+    o["radius"] = r.radius;
+    o["label_position"] = vec2_array(r.label_position.x(), r.label_position.y());
+    o["is_diameter"] = r.is_diameter;
+    o["text_height"] = r.text_height;
+    o["arrow_size"] = r.arrow_size;
+    o["text_override"] = QString::fromStdString(r.text_override);
+    o["color"] = color_array(r.color);
+    return o;
+}
+
+cadino::core::RadialDimension radial_dim_from(const QJsonObject& o) {
+    cadino::core::RadialDimension r;
+    r.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    r.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    r.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
+    const auto c = o["center"].toArray();
+    const auto lp = o["label_position"].toArray();
+    if (c.size() >= 2) r.center = {c[0].toDouble(), c[1].toDouble()};
+    if (lp.size() >= 2) r.label_position = {lp[0].toDouble(), lp[1].toDouble()};
+    r.radius = o["radius"].toDouble(r.radius);
+    r.is_diameter = o["is_diameter"].toBool(r.is_diameter);
+    r.text_height = o["text_height"].toDouble(r.text_height);
+    r.arrow_size = o["arrow_size"].toDouble(r.arrow_size);
+    r.text_override = o["text_override"].toString().toStdString();
+    if (o.contains("color")) r.color = color_from(o["color"].toArray());
+    return r;
+}
+
 QJsonObject to_json(const cadino::core::AngularDimension& a) {
     QJsonObject o;
     o["id"] = qint64(a.id.value);
@@ -701,6 +735,10 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     for (const auto& [id, a] : doc.angular_dims()) angdims_json.append(to_json(a));
     root["angular_dims"] = angdims_json;
 
+    QJsonArray raddims_json;
+    for (const auto& [id, r] : doc.radial_dims()) raddims_json.append(to_json(r));
+    root["radial_dims"] = raddims_json;
+
     QJsonArray layers_json;
     for (const auto& [id, l] : doc.layers()) layers_json.append(to_json(l));
     root["layers"] = layers_json;
@@ -829,6 +867,11 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto a = angular_dim_from(v.toObject());
         max_id = std::max(max_id, a.id.value);
         loaded.add_angular_dim(std::move(a));
+    }
+    for (const auto& v : root["radial_dims"].toArray()) {
+        auto r = radial_dim_from(v.toObject());
+        max_id = std::max(max_id, r.id.value);
+        loaded.add_radial_dim(std::move(r));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

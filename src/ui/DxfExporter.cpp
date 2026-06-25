@@ -201,6 +201,18 @@ bool export_document_as_dxf(const cadino::core::Document& doc, const QString& pa
                  QString::fromStdString(l.text), "LEADERS");
     }
 
+    for (const auto& [id, rd] : doc.radial_dims()) {
+        dxf.line({rd.center.x(), rd.center.y()},
+                 {rd.label_position.x(), rd.label_position.y()}, "DIMENSIONS");
+        const QString label = !rd.text_override.empty()
+            ? QString::fromStdString(rd.text_override)
+            : rd.is_diameter
+                ? QString::asprintf("D %.1f mm", rd.radius * 2.0)
+                : QString::asprintf("R %.1f mm", rd.radius);
+        dxf.text({rd.label_position.x(), rd.label_position.y()}, rd.text_height,
+                 0.0, label, "DIMENSIONS");
+    }
+
     for (const auto& [id, ad] : doc.angular_dims()) {
         const double a1 = std::atan2(ad.p1.y() - ad.vertex.y(),
                                      ad.p1.x() - ad.vertex.x());

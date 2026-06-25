@@ -12,6 +12,7 @@ add_library(cadino_ui STATIC
     TextTool.cpp
     LeaderTool.cpp
     AngularDimensionTool.cpp
+    RadialDimensionTool.cpp
     Alignment.cpp
     Array.cpp
     Clipboard.cpp

@@ -17,6 +17,7 @@ enum class SelectKind {
     Text,
     Leader,
     AngularDimension,
+    RadialDimension,
 };
 
 struct Selection {

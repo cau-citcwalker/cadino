@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -37,11 +38,13 @@
 #include "PolarArrayTool.hpp"
 #include "AngularDimensionTool.hpp"
 #include "LeaderTool.hpp"
+#include "RadialDimensionTool.hpp"
 #include "TextTool.hpp"
 #include "TrimExtendTool.hpp"
 
 #include "command/AngularDimensionCommands.hpp"
 #include "command/LeaderCommands.hpp"
+#include "command/RadialDimensionCommands.hpp"
 #include "command/TextAnnotationCommands.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
@@ -482,6 +485,12 @@ void MainWindow::build_toolbar() {
     group->addAction(ang_action);
     connect(ang_action, &QAction::triggered, this, &MainWindow::activate_angular_dim_tool);
 
+    auto* rad_action = tools->addAction("Radius");
+    rad_action->setCheckable(true);
+    rad_action->setShortcut(QKeySequence("Shift+R"));
+    group->addAction(rad_action);
+    connect(rad_action, &QAction::triggered, this, &MainWindow::activate_radial_dim_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -600,6 +609,16 @@ void MainWindow::activate_angular_dim_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::AngularDimensionTool>());
     statusBar()->showMessage(
         "Angular dim — click the vertex, then a point on each arm (Esc cancels)");
+}
+
+void MainWindow::activate_radial_dim_tool() {
+    const auto modifiers = QApplication::keyboardModifiers();
+    const bool diameter = (modifiers & Qt::ShiftModifier) != 0;
+    plan_view_->set_tool(std::make_unique<cadino::ui::RadialDimensionTool>(diameter));
+    statusBar()->showMessage(
+        diameter
+            ? "Diameter — click a cylinder, then click where the label goes"
+            : "Radius — click a cylinder, then click where the label goes (Shift+click toolbar for Ø)");
 }
 
 void MainWindow::activate_mirror_tool() {
@@ -1363,6 +1382,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::AngularDimension:
                 stack_.execute(std::make_unique<cadino::core::RemoveAngularDimensionCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::RadialDimension:
+                stack_.execute(std::make_unique<cadino::core::RemoveRadialDimensionCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

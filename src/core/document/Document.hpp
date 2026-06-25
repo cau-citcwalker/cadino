@@ -12,6 +12,7 @@
 #include "entity/AngularDimension.hpp"
 #include "entity/Layer.hpp"
 #include "entity/Leader.hpp"
+#include "entity/RadialDimension.hpp"
 #include "entity/MeshGeometry.hpp"
 #include "entity/NurbsCurve.hpp"
 #include "entity/NurbsSurface.hpp"
@@ -57,6 +58,7 @@ public:
     EntityId add_text(TextAnnotation t);
     EntityId add_leader(Leader l);
     EntityId add_angular_dim(AngularDimension a);
+    EntityId add_radial_dim(RadialDimension r);
 
     [[nodiscard]] const Wall* find_wall(EntityId id) const;
     [[nodiscard]] Wall* find_wall(EntityId id);
@@ -90,6 +92,8 @@ public:
     [[nodiscard]] Leader* find_leader(EntityId id);
     [[nodiscard]] const AngularDimension* find_angular_dim(EntityId id) const;
     [[nodiscard]] AngularDimension* find_angular_dim(EntityId id);
+    [[nodiscard]] const RadialDimension* find_radial_dim(EntityId id) const;
+    [[nodiscard]] RadialDimension* find_radial_dim(EntityId id);
 
     bool remove_wall(EntityId id);
     bool remove_door(EntityId id);
@@ -107,6 +111,7 @@ public:
     bool remove_text(EntityId id);
     bool remove_leader(EntityId id);
     bool remove_angular_dim(EntityId id);
+    bool remove_radial_dim(EntityId id);
 
     [[nodiscard]] const std::unordered_map<EntityId, Wall>& walls() const noexcept { return walls_; }
     [[nodiscard]] const std::unordered_map<EntityId, Door>& doors() const noexcept { return doors_; }
@@ -124,13 +129,14 @@ public:
     [[nodiscard]] const std::unordered_map<EntityId, TextAnnotation>& texts() const noexcept { return texts_; }
     [[nodiscard]] const std::unordered_map<EntityId, Leader>& leaders() const noexcept { return leaders_; }
     [[nodiscard]] const std::unordered_map<EntityId, AngularDimension>& angular_dims() const noexcept { return angular_dims_; }
+    [[nodiscard]] const std::unordered_map<EntityId, RadialDimension>& radial_dims() const noexcept { return radial_dims_; }
 
     [[nodiscard]] std::size_t entity_count() const noexcept {
         return walls_.size() + doors_.size() + windows_.size() + slabs_.size() +
                boxes_.size() + cylinders_.size() + meshes_.size() + curves_.size() +
                blocks_.size() + surfaces_.size() + block_instances_.size() +
                dimensions_.size() + texts_.size() + leaders_.size() +
-               angular_dims_.size();
+               angular_dims_.size() + radial_dims_.size();
     }
 
 private:
@@ -150,6 +156,7 @@ private:
     std::unordered_map<EntityId, TextAnnotation> texts_;
     std::unordered_map<EntityId, Leader> leaders_;
     std::unordered_map<EntityId, AngularDimension> angular_dims_;
+    std::unordered_map<EntityId, RadialDimension> radial_dims_;
     std::unordered_map<EntityId, Layer> layers_;
     EntityId default_layer_{};
     EntityId active_layer_{};

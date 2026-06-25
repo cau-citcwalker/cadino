@@ -17,6 +17,7 @@ add_library(cadino_core STATIC
     command/TextAnnotationCommands.cpp
     command/LeaderCommands.cpp
     command/AngularDimensionCommands.cpp
+    command/RadialDimensionCommands.cpp
 )
 
 target_include_directories(cadino_core

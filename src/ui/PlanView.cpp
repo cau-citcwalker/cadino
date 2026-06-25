@@ -15,6 +15,7 @@
 #include "entity/AngularDimension.hpp"
 #include "entity/Dimension.hpp"
 #include "entity/Leader.hpp"
+#include "entity/RadialDimension.hpp"
 #include "entity/TextAnnotation.hpp"
 
 namespace cadino::ui {
@@ -128,6 +129,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_texts(p);
     draw_leaders(p);
     draw_angular_dims(p);
+    draw_radial_dims(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -741,6 +743,33 @@ void PlanView::draw_dimensions(QPainter& p) {
         p.fillRect(rect.adjusted(-3, -1, 3, 1), QColor(248, 248, 248));
         p.drawText(rect, Qt::AlignCenter, label);
         p.restore();
+    }
+}
+
+void PlanView::draw_radial_dims(QPainter& p) {
+    for (const auto& [id, rd] : document_.radial_dims()) {
+        if (!layer_visible(rd.layer_id)) continue;
+
+        QPen pen(QColor::fromRgbF(rd.color.r, rd.color.g, rd.color.b), 1.5);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+
+        const QPointF c = model_to_screen({rd.center.x(), rd.center.y()});
+        const QPointF lp = model_to_screen({rd.label_position.x(), rd.label_position.y()});
+        p.drawLine(c, lp);
+
+        QFont font = p.font();
+        font.setPointSizeF(std::max(8.0, rd.text_height * zoom_ * 0.6));
+        font.setBold(true);
+        p.setFont(font);
+        p.setPen(QColor::fromRgbF(rd.color.r, rd.color.g, rd.color.b));
+        const QString label = !rd.text_override.empty()
+            ? QString::fromStdString(rd.text_override)
+            : rd.is_diameter
+                ? QString(QStringLiteral("Ø %1 mm")).arg(rd.radius * 2.0, 0, 'f', 1)
+                : QString(QStringLiteral("R %1 mm")).arg(rd.radius, 0, 'f', 1);
+        p.drawText(lp + QPointF(6, -4), label);
     }
 }
 
