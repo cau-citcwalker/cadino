@@ -11,6 +11,8 @@ add_library(cadino_ui STATIC
     DimensionTool.cpp
     Alignment.cpp
     Clipboard.cpp
+    Mirror.cpp
+    MirrorTool.cpp
     IfcExporter.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp

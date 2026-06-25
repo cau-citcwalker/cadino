@@ -26,6 +26,7 @@
 #include "Clipboard.hpp"
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
+#include "MirrorTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
@@ -286,6 +287,11 @@ void MainWindow::build_menu() {
     insert_inst_a->setShortcut(QKeySequence("Ctrl+Alt+I"));
     connect(insert_inst_a, &QAction::triggered, this, &MainWindow::insert_block_instance);
 
+    edit_menu->addSeparator();
+    auto* mirror_a = edit_menu->addAction("&Mirror");
+    mirror_a->setShortcut(QKeySequence("Ctrl+M"));
+    connect(mirror_a, &QAction::triggered, this, &MainWindow::activate_mirror_tool);
+
     auto* align_menu = menuBar()->addMenu("Ali&gn");
     auto add_align = [&](const QString& label, cadino::ui::AlignMode mode,
                          const QKeySequence& key = {}) {
@@ -519,6 +525,16 @@ void MainWindow::activate_dimension_tool() {
     if (dimension_action_) dimension_action_->setChecked(true);
     statusBar()->showMessage(
         "Dimension tool — click two endpoints, then click to position the dimension line (Esc cancels)");
+}
+
+void MainWindow::activate_mirror_tool() {
+    if (plan_view_->selections().empty()) {
+        statusBar()->showMessage("Mirror — select entities first, then click two points for the axis");
+    } else {
+        statusBar()->showMessage(
+            "Mirror — click two points to define the axis (Shift on the 2nd click = move-mirror, Esc cancels)");
+    }
+    plan_view_->set_tool(std::make_unique<cadino::ui::MirrorTool>());
 }
 
 void MainWindow::set_view_mode(ViewMode mode) {
