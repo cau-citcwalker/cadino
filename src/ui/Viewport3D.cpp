@@ -72,6 +72,9 @@ uniform vec3 u_eye_pos;
 uniform int u_shadow_mode;
 uniform int u_has_texture;
 uniform sampler2D u_albedo;
+uniform int u_section_enabled;
+uniform vec3 u_section_normal;
+uniform vec3 u_section_point;
 
 const float PI = 3.14159265358979323846;
 
@@ -141,6 +144,10 @@ vec3 brdf_lobe(vec3 N, vec3 V, vec3 L, vec3 light_color, vec3 albedo, float roug
 }
 
 void main() {
+    if (u_section_enabled == 1) {
+        // Clip everything on the positive side of the cut plane.
+        if (dot(v_world - u_section_point, u_section_normal) > 0.0) discard;
+    }
     if (u_shadow_mode == 1) {
         frag_color = vec4(0.02, 0.02, 0.04, 0.30);
         return;
@@ -793,6 +800,9 @@ void Viewport3D::paintGL() {
     program_->setUniformValue("u_view_proj", vp);
     program_->setUniformValue("u_light_dir", QVector3D(-0.4f, -0.3f, -1.0f));
     program_->setUniformValue("u_eye_pos", eye_position());
+    program_->setUniformValue("u_section_enabled", section_enabled_ ? 1 : 0);
+    program_->setUniformValue("u_section_normal", section_normal_.normalized());
+    program_->setUniformValue("u_section_point", section_point_);
 
     QMatrix4x4 identity;
     program_->setUniformValue("u_model", identity);

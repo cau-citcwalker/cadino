@@ -401,6 +401,36 @@ void MainWindow::build_menu() {
     connect(mode_quad_action_, &QAction::triggered, this,
             [this] { set_view_mode(ViewMode::Quad); });
 
+    view_menu->addSeparator();
+    auto* section_menu = view_menu->addMenu("Section");
+    auto* section_off = section_menu->addAction("Off");
+    connect(section_off, &QAction::triggered, this,
+            [this] { set_section_axis(-1, 0.0); });
+    auto* section_x = section_menu->addAction("Slice along X...");
+    connect(section_x, &QAction::triggered, this, [this] {
+        bool ok = false;
+        const double pos = QInputDialog::getDouble(
+            this, "Section X", "X position (mm):", 2000.0,
+            -1'000'000.0, 1'000'000.0, 0, &ok);
+        if (ok) set_section_axis(0, pos);
+    });
+    auto* section_y = section_menu->addAction("Slice along Y...");
+    connect(section_y, &QAction::triggered, this, [this] {
+        bool ok = false;
+        const double pos = QInputDialog::getDouble(
+            this, "Section Y", "Y position (mm):", 1500.0,
+            -1'000'000.0, 1'000'000.0, 0, &ok);
+        if (ok) set_section_axis(1, pos);
+    });
+    auto* section_z = section_menu->addAction("Slice along Z...");
+    connect(section_z, &QAction::triggered, this, [this] {
+        bool ok = false;
+        const double pos = QInputDialog::getDouble(
+            this, "Section Z", "Z position (mm):", 1200.0,
+            -1'000'000.0, 1'000'000.0, 0, &ok);
+        if (ok) set_section_axis(2, pos);
+    });
+
     auto* mode_group = new QActionGroup(this);
     mode_group->setExclusive(true);
     mode_group->addAction(mode_plan_action_);
@@ -919,6 +949,31 @@ double slab_area(const cadino::core::Slab& s) {
     return std::abs(area) * 0.5;
 }
 }  // namespace
+
+void MainWindow::set_section_axis(int axis, double position) {
+    if (axis < 0) {
+        viewport_3d_->set_section(false, {0, 0, 1}, {0, 0, 0});
+        if (front_view_) front_view_->set_section(false, {0, 0, 1}, {0, 0, 0});
+        if (side_view_)  side_view_->set_section(false, {0, 0, 1}, {0, 0, 0});
+        statusBar()->showMessage("Section: off");
+        return;
+    }
+    QVector3D normal;
+    QVector3D point;
+    switch (axis) {
+        case 0: normal = {1, 0, 0}; point = {static_cast<float>(position), 0, 0}; break;
+        case 1: normal = {0, 1, 0}; point = {0, static_cast<float>(position), 0}; break;
+        case 2: normal = {0, 0, 1}; point = {0, 0, static_cast<float>(position)}; break;
+        default: return;
+    }
+    viewport_3d_->set_section(true, normal, point);
+    if (front_view_) front_view_->set_section(true, normal, point);
+    if (side_view_)  side_view_->set_section(true, normal, point);
+    statusBar()->showMessage(
+        QString("Section: axis %1 at %2 mm")
+            .arg(axis == 0 ? "X" : axis == 1 ? "Y" : "Z")
+            .arg(position, 0, 'f', 0));
+}
 
 void MainWindow::show_schedule() {
     std::vector<ScheduleRow> rows;

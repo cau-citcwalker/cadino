@@ -92,6 +92,7 @@ private:
     void export_stl();
     void export_ifc();
     void show_schedule();
+    void set_section_axis(int axis, double position);  // axis: -1 off, 0 X, 1 Y, 2 Z
     void export_elevation_dxf(int plane_index);  // 0=Front, 1=Back, 2=Left, 3=Right
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();

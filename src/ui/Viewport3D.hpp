@@ -48,6 +48,14 @@ public:
     void set_preset(CameraPreset preset);
     [[nodiscard]] CameraPreset preset() const noexcept { return preset_; }
 
+    void set_section(bool enabled, QVector3D normal, QVector3D point) {
+        section_enabled_ = enabled;
+        section_normal_ = normal;
+        section_point_ = point;
+        update();
+    }
+    [[nodiscard]] bool section_enabled() const noexcept { return section_enabled_; }
+
     // Project a world-space point onto current screen pixels. Used by tests
     // to locate gizmo handles for QTest mouse synthesis.
     [[nodiscard]] QPointF world_to_screen(QVector3D world) const;
@@ -133,6 +141,10 @@ private:
     float camera_pitch_{30.0f};
     float camera_distance_{8000.0f};
     CameraPreset preset_{CameraPreset::Iso};
+
+    bool section_enabled_{false};
+    QVector3D section_normal_{0.0f, 0.0f, 1.0f};
+    QVector3D section_point_{0.0f, 0.0f, 1200.0f};
 
     Qt::MouseButton drag_button_{Qt::NoButton};
     QPointF drag_last_;
