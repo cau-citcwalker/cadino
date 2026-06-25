@@ -59,6 +59,9 @@ private:
     void activate_curve_tool();
     void activate_surface_tool();
     void activate_dimension_tool();
+    void copy_selected();
+    void paste_clipboard();
+    void duplicate_selected();
     void delete_selected();
     void group_selected();
     void ungroup_selected();

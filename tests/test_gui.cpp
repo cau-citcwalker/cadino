@@ -50,6 +50,13 @@ QPoint screen_for(const cadino::ui::PlanView& v, double x, double y) {
 int main(int argc, char** argv) {
     // Headless plugin so the suite runs in CI without a display server.
     qputenv("QT_QPA_PLATFORM", "offscreen");
+#ifdef CADINO_QT_PLATFORMS_DIR
+    // Help Qt locate the offscreen platform plugin even when the test is
+    // launched without windeployqt — the path is baked in at build time.
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM_PLUGIN_PATH")) {
+        qputenv("QT_QPA_PLATFORM_PLUGIN_PATH", CADINO_QT_PLATFORMS_DIR);
+    }
+#endif
     QApplication app(argc, argv);
     return Catch::Session().run(argc, argv);
 }

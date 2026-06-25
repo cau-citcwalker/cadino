@@ -23,6 +23,7 @@
 #include "BooleanOps.hpp"
 #include "BoxTool.hpp"
 #include "Alignment.hpp"
+#include "Clipboard.hpp"
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
 #include "CylinderTool.hpp"
@@ -228,6 +229,19 @@ void MainWindow::build_menu() {
         update_undo_redo_actions();
     });
     update_undo_redo_actions();
+
+    edit_menu->addSeparator();
+    auto* copy_a = edit_menu->addAction("&Copy");
+    copy_a->setShortcut(QKeySequence::Copy);
+    connect(copy_a, &QAction::triggered, this, &MainWindow::copy_selected);
+
+    auto* paste_a = edit_menu->addAction("&Paste");
+    paste_a->setShortcut(QKeySequence::Paste);
+    connect(paste_a, &QAction::triggered, this, &MainWindow::paste_clipboard);
+
+    auto* duplicate_a = edit_menu->addAction("Du&plicate");
+    duplicate_a->setShortcut(QKeySequence("Ctrl+D"));
+    connect(duplicate_a, &QAction::triggered, this, &MainWindow::duplicate_selected);
 
     edit_menu->addSeparator();
     delete_action_ = edit_menu->addAction("&Delete");
@@ -1101,6 +1115,34 @@ void MainWindow::ungroup_selected() {
     }
     plan_view_->notify_document_modified();
     statusBar()->showMessage("Ungrouped selection");
+}
+
+void MainWindow::copy_selected() {
+    cadino::ui::Clipboard::instance().put(document_, plan_view_->selections());
+    statusBar()->showMessage(
+        QString("Copied %1 entities").arg(plan_view_->selections().size()));
+}
+
+void MainWindow::paste_clipboard() {
+    auto& clip = cadino::ui::Clipboard::instance();
+    if (clip.empty()) {
+        statusBar()->showMessage("Clipboard is empty");
+        return;
+    }
+    const auto added = clip.paste(document_, stack_, {300.0, 300.0});
+    plan_view_->set_selections(added);
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Pasted %1 entities").arg(added.size()));
+}
+
+void MainWindow::duplicate_selected() {
+    auto& clip = cadino::ui::Clipboard::instance();
+    clip.put(document_, plan_view_->selections());
+    if (clip.empty()) return;
+    const auto added = clip.paste(document_, stack_, {300.0, 300.0});
+    plan_view_->set_selections(added);
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(QString("Duplicated %1 entities").arg(added.size()));
 }
 
 void MainWindow::delete_selected() {
