@@ -14,6 +14,7 @@
 #include "entity/NurbsCurve.hpp"
 #include "entity/NurbsSurface.hpp"
 #include "entity/Slab.hpp"
+#include "entity/TextAnnotation.hpp"
 #include "entity/Wall.hpp"
 #include "entity/Window.hpp"
 
@@ -51,6 +52,7 @@ public:
     EntityId add_block_def(BlockDefinition def);
     EntityId add_block_instance(BlockInstance inst);
     EntityId add_dimension(Dimension dim);
+    EntityId add_text(TextAnnotation t);
 
     [[nodiscard]] const Wall* find_wall(EntityId id) const;
     [[nodiscard]] Wall* find_wall(EntityId id);
@@ -78,6 +80,8 @@ public:
     [[nodiscard]] BlockInstance* find_block_instance(EntityId id);
     [[nodiscard]] const Dimension* find_dimension(EntityId id) const;
     [[nodiscard]] Dimension* find_dimension(EntityId id);
+    [[nodiscard]] const TextAnnotation* find_text(EntityId id) const;
+    [[nodiscard]] TextAnnotation* find_text(EntityId id);
 
     bool remove_wall(EntityId id);
     bool remove_door(EntityId id);
@@ -92,6 +96,7 @@ public:
     bool remove_block_def(EntityId id);
     bool remove_block_instance(EntityId id);
     bool remove_dimension(EntityId id);
+    bool remove_text(EntityId id);
 
     [[nodiscard]] const std::unordered_map<EntityId, Wall>& walls() const noexcept { return walls_; }
     [[nodiscard]] const std::unordered_map<EntityId, Door>& doors() const noexcept { return doors_; }
@@ -106,12 +111,13 @@ public:
     [[nodiscard]] const std::unordered_map<EntityId, BlockDefinition>& block_defs() const noexcept { return block_defs_; }
     [[nodiscard]] const std::unordered_map<EntityId, BlockInstance>& block_instances() const noexcept { return block_instances_; }
     [[nodiscard]] const std::unordered_map<EntityId, Dimension>& dimensions() const noexcept { return dimensions_; }
+    [[nodiscard]] const std::unordered_map<EntityId, TextAnnotation>& texts() const noexcept { return texts_; }
 
     [[nodiscard]] std::size_t entity_count() const noexcept {
         return walls_.size() + doors_.size() + windows_.size() + slabs_.size() +
                boxes_.size() + cylinders_.size() + meshes_.size() + curves_.size() +
                blocks_.size() + surfaces_.size() + block_instances_.size() +
-               dimensions_.size();
+               dimensions_.size() + texts_.size();
     }
 
 private:
@@ -128,6 +134,7 @@ private:
     std::unordered_map<EntityId, BlockDefinition> block_defs_;
     std::unordered_map<EntityId, BlockInstance> block_instances_;
     std::unordered_map<EntityId, Dimension> dimensions_;
+    std::unordered_map<EntityId, TextAnnotation> texts_;
     std::unordered_map<EntityId, Layer> layers_;
     EntityId default_layer_{};
     EntityId active_layer_{};

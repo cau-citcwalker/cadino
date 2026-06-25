@@ -35,7 +35,10 @@
 #include "MirrorTool.hpp"
 #include "OffsetTool.hpp"
 #include "PolarArrayTool.hpp"
+#include "TextTool.hpp"
 #include "TrimExtendTool.hpp"
+
+#include "command/TextAnnotationCommands.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
@@ -457,6 +460,12 @@ void MainWindow::build_toolbar() {
     group->addAction(dimension_action_);
     connect(dimension_action_, &QAction::triggered, this, &MainWindow::activate_dimension_tool);
 
+    auto* text_action = tools->addAction("Text");
+    text_action->setCheckable(true);
+    text_action->setShortcut(QKeySequence("T"));
+    group->addAction(text_action);
+    connect(text_action, &QAction::triggered, this, &MainWindow::activate_text_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -550,6 +559,15 @@ void MainWindow::activate_dimension_tool() {
     if (dimension_action_) dimension_action_->setChecked(true);
     statusBar()->showMessage(
         "Dimension tool — click two endpoints, then click to position the dimension line (Esc cancels)");
+}
+
+void MainWindow::activate_text_tool() {
+    bool ok = false;
+    const QString text = QInputDialog::getText(
+        this, "Text", "Text:", QLineEdit::Normal, "Text", &ok);
+    if (!ok || text.isEmpty()) return;
+    plan_view_->set_tool(std::make_unique<cadino::ui::TextTool>(text));
+    statusBar()->showMessage("Text — click to place the label (Esc cancels)");
 }
 
 void MainWindow::activate_mirror_tool() {
@@ -1304,6 +1322,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::Dimension:
                 stack_.execute(std::make_unique<cadino::core::RemoveDimensionCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::Text:
+                stack_.execute(std::make_unique<cadino::core::RemoveTextAnnotationCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

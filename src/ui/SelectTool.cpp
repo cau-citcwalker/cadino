@@ -203,6 +203,14 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
             best = {id, SelectKind::Dimension};
         }
     }
+    for (const auto& [id, t] : doc.texts()) {
+        const double d = std::hypot(model_pos.x() - t.position.x(),
+                                    model_pos.y() - t.position.y());
+        if (d <= pick_radius && d < best_dist) {
+            best_dist = d;
+            best = {id, SelectKind::Text};
+        }
+    }
     return best;
 }
 
@@ -305,6 +313,9 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
                 break;
             case SelectKind::Dimension:
                 if (auto* d = doc.find_dimension(hit.id)) layer_id = d->layer_id;
+                break;
+            case SelectKind::Text:
+                if (auto* t = doc.find_text(hit.id)) layer_id = t->layer_id;
                 break;
             default: break;
         }

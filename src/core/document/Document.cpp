@@ -79,6 +79,10 @@ EntityId Document::add_dimension(Dimension d) {
     if (!d.layer_id.valid()) d.layer_id = active_layer_;
     return insert_with_id(dimensions_, std::move(d));
 }
+EntityId Document::add_text(TextAnnotation t) {
+    if (!t.layer_id.valid()) t.layer_id = active_layer_;
+    return insert_with_id(texts_, std::move(t));
+}
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }
@@ -106,6 +110,8 @@ const BlockInstance*   Document::find_block_instance(EntityId id) const { return
 BlockInstance*         Document::find_block_instance(EntityId id)       { return find_in(block_instances_, id); }
 const Dimension*       Document::find_dimension(EntityId id) const { return find_in(dimensions_, id); }
 Dimension*             Document::find_dimension(EntityId id)       { return find_in(dimensions_, id); }
+const TextAnnotation*  Document::find_text(EntityId id) const { return find_in(texts_, id); }
+TextAnnotation*        Document::find_text(EntityId id)       { return find_in(texts_, id); }
 
 bool Document::remove_wall(EntityId id)   { return walls_.erase(id)   > 0; }
 bool Document::remove_door(EntityId id)   { return doors_.erase(id)   > 0; }
@@ -120,5 +126,6 @@ bool Document::remove_surface(EntityId id)  { return surfaces_.erase(id)  > 0; }
 bool Document::remove_block_def(EntityId id){ return block_defs_.erase(id) > 0; }
 bool Document::remove_block_instance(EntityId id){ return block_instances_.erase(id) > 0; }
 bool Document::remove_dimension(EntityId id){ return dimensions_.erase(id) > 0; }
+bool Document::remove_text(EntityId id){ return texts_.erase(id) > 0; }
 
 }  // namespace cadino::core

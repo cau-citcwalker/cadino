@@ -185,6 +185,12 @@ bool export_document_as_dxf(const cadino::core::Document& doc, const QString& pa
         dxf.line(p1, p2, "WINDOWS");
     }
 
+    for (const auto& [id, t] : doc.texts()) {
+        const double rot_deg = t.rotation_z * 180.0 / std::numbers::pi;
+        dxf.text({t.position.x(), t.position.y()}, t.height, rot_deg,
+                 QString::fromStdString(t.text), "TEXT");
+    }
+
     for (const auto& [id, d] : doc.dimensions()) {
         const double dx = d.end.x() - d.start.x();
         const double dy = d.end.y() - d.start.y();

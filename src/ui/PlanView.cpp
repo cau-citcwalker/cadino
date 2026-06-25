@@ -13,6 +13,7 @@
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
 #include "entity/Dimension.hpp"
+#include "entity/TextAnnotation.hpp"
 
 namespace cadino::ui {
 
@@ -122,6 +123,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_block_instances(p);
     draw_surfaces(p);
     draw_dimensions(p);
+    draw_texts(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -720,6 +722,25 @@ void PlanView::draw_dimensions(QPainter& p) {
                           static_cast<qreal>(ts.height()));
         p.fillRect(rect.adjusted(-3, -1, 3, 1), QColor(248, 248, 248));
         p.drawText(rect, Qt::AlignCenter, label);
+        p.restore();
+    }
+}
+
+void PlanView::draw_texts(QPainter& p) {
+    for (const auto& [id, t] : document_.texts()) {
+        if (!layer_visible(t.layer_id)) continue;
+        const QPointF anchor = model_to_screen({t.position.x(), t.position.y()});
+
+        QFont font = p.font();
+        font.setPointSizeF(std::max(8.0, t.height * zoom_ * 0.6));
+        font.setBold(true);
+        p.setFont(font);
+        p.setPen(QColor::fromRgbF(t.color.r, t.color.g, t.color.b));
+
+        p.save();
+        p.translate(anchor);
+        p.rotate(t.rotation_z * 180.0 / 3.14159265358979323846);
+        p.drawText(QPointF(0, 0), QString::fromStdString(t.text));
         p.restore();
     }
 }

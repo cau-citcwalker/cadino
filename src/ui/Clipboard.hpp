@@ -13,6 +13,7 @@
 #include "entity/Dimension.hpp"
 #include "entity/NurbsCurve.hpp"
 #include "entity/NurbsSurface.hpp"
+#include "entity/TextAnnotation.hpp"
 #include "entity/Wall.hpp"
 
 namespace cadino::core {
@@ -35,7 +36,8 @@ public:
         cadino::core::NurbsSurface,
         cadino::core::Block,
         cadino::core::BlockInstance,
-        cadino::core::Dimension>;
+        cadino::core::Dimension,
+        cadino::core::TextAnnotation>;
 
     static Clipboard& instance();
 

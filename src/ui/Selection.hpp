@@ -14,6 +14,7 @@ enum class SelectKind {
     NurbsSurface,
     BlockInstance,
     Dimension,
+    Text,
 };
 
 struct Selection {

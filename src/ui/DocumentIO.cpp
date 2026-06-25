@@ -500,6 +500,33 @@ QJsonObject to_json(const cadino::core::Dimension& d) {
     return o;
 }
 
+QJsonObject to_json(const cadino::core::TextAnnotation& t) {
+    QJsonObject o;
+    o["id"] = qint64(t.id.value);
+    o["group_id"] = qint64(t.group_id.value);
+    o["layer_id"] = qint64(t.layer_id.value);
+    o["position"] = vec2_array(t.position.x(), t.position.y());
+    o["text"] = QString::fromStdString(t.text);
+    o["height"] = t.height;
+    o["rotation_z"] = t.rotation_z;
+    o["color"] = color_array(t.color);
+    return o;
+}
+
+cadino::core::TextAnnotation text_from(const QJsonObject& o) {
+    cadino::core::TextAnnotation t;
+    t.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    t.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    t.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
+    const auto p = o["position"].toArray();
+    if (p.size() >= 2) t.position = {p[0].toDouble(), p[1].toDouble()};
+    t.text = o["text"].toString().toStdString();
+    t.height = o["height"].toDouble(t.height);
+    t.rotation_z = o["rotation_z"].toDouble(t.rotation_z);
+    if (o.contains("color")) t.color = color_from(o["color"].toArray());
+    return t;
+}
+
 cadino::core::Dimension dimension_from(const QJsonObject& o) {
     cadino::core::Dimension d;
     d.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
@@ -590,6 +617,10 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     QJsonArray dims_json;
     for (const auto& [id, d] : doc.dimensions()) dims_json.append(to_json(d));
     root["dimensions"] = dims_json;
+
+    QJsonArray texts_json;
+    for (const auto& [id, t] : doc.texts()) texts_json.append(to_json(t));
+    root["texts"] = texts_json;
 
     QJsonArray layers_json;
     for (const auto& [id, l] : doc.layers()) layers_json.append(to_json(l));
@@ -704,6 +735,11 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto d = dimension_from(v.toObject());
         max_id = std::max(max_id, d.id.value);
         loaded.add_dimension(std::move(d));
+    }
+    for (const auto& v : root["texts"].toArray()) {
+        auto t = text_from(v.toObject());
+        max_id = std::max(max_id, t.id.value);
+        loaded.add_text(std::move(t));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

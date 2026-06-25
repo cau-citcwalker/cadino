@@ -8,6 +8,7 @@
 #include "command/DimensionCommands.hpp"
 #include "command/NurbsCurveCommands.hpp"
 #include "command/NurbsSurfaceCommands.hpp"
+#include "command/TextAnnotationCommands.hpp"
 #include "command/WallCommands.hpp"
 #include "document/Document.hpp"
 
@@ -49,6 +50,9 @@ void Clipboard::put(const cadino::core::Document& doc,
                 break;
             case SelectKind::Dimension:
                 if (const auto* d = doc.find_dimension(sel.id)) entries_.emplace_back(*d);
+                break;
+            case SelectKind::Text:
+                if (const auto* t = doc.find_text(sel.id)) entries_.emplace_back(*t);
                 break;
             default: break;
         }
@@ -126,6 +130,12 @@ std::vector<Selection> Clipboard::paste(cadino::core::Document& doc,
                 auto* p = cmd.get();
                 stack.execute(std::move(cmd));
                 created.push_back({p->entity_id(), SelectKind::Dimension});
+            } else if constexpr (std::is_same_v<T, cadino::core::TextAnnotation>) {
+                copy.position = shifted_xy(src.position);
+                auto cmd = std::make_unique<cadino::core::AddTextAnnotationCommand>(std::move(copy));
+                auto* p = cmd.get();
+                stack.execute(std::move(cmd));
+                created.push_back({p->entity_id(), SelectKind::Text});
             }
             (void)doc;
         }, entry);
