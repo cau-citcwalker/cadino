@@ -69,6 +69,7 @@ private:
     void export_3dm();
     void export_obj();
     void export_stl();
+    void export_ifc();
     void export_elevation_dxf(int plane_index);  // 0=Front, 1=Back, 2=Left, 3=Right
     void set_view_mode(ViewMode mode);
     void update_undo_redo_actions();

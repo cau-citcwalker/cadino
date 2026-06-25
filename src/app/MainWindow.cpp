@@ -29,6 +29,7 @@
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
 #include "DxfExporter.hpp"
+#include "IfcExporter.hpp"
 #include "MeshExport.hpp"
 #include "PlanView.hpp"
 #include "PropertiesPanel.hpp"
@@ -195,6 +196,9 @@ void MainWindow::build_menu() {
 
     auto* export_stl_a = file_menu->addAction("Export S&TL...");
     connect(export_stl_a, &QAction::triggered, this, &MainWindow::export_stl);
+
+    auto* export_ifc_a = file_menu->addAction("Export &IFC...");
+    connect(export_ifc_a, &QAction::triggered, this, &MainWindow::export_ifc);
 
 #ifndef CADINO_HAS_OPENNURBS
     import_3dm_a->setEnabled(false);
@@ -671,6 +675,20 @@ void MainWindow::export_stl() {
         return;
     }
     statusBar()->showMessage(QString("Exported STL to %1").arg(path));
+}
+
+void MainWindow::export_ifc() {
+    QString path = QFileDialog::getSaveFileName(
+        this, "Export IFC", current_file_path_, "IFC (*.ifc)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".ifc", Qt::CaseInsensitive)) path += ".ifc";
+
+    QString error;
+    if (!cadino::ui::export_document_as_ifc(document_, path, &error)) {
+        QMessageBox::warning(this, "Export failed", error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported IFC to %1").arg(path));
 }
 
 void MainWindow::export_elevation_dxf(int plane_index) {

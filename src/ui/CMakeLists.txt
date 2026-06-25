@@ -10,6 +10,7 @@ add_library(cadino_ui STATIC
     NurbsSurfaceTool.cpp
     DimensionTool.cpp
     Alignment.cpp
+    IfcExporter.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
     LayerPanel.cpp
