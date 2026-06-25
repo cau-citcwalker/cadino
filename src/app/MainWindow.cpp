@@ -35,6 +35,7 @@
 #include "MirrorTool.hpp"
 #include "OffsetTool.hpp"
 #include "PolarArrayTool.hpp"
+#include "TrimExtendTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
 #include "DoorTool.hpp"
@@ -311,6 +312,10 @@ void MainWindow::build_menu() {
     auto* offset_a = edit_menu->addAction("&Offset Wall...");
     offset_a->setShortcut(QKeySequence("Ctrl+Alt+O"));
     connect(offset_a, &QAction::triggered, this, &MainWindow::activate_offset_tool);
+
+    auto* trim_a = edit_menu->addAction("&Trim / Extend Wall");
+    trim_a->setShortcut(QKeySequence("Ctrl+Alt+T"));
+    connect(trim_a, &QAction::triggered, this, &MainWindow::activate_trim_extend_tool);
 
     auto* align_menu = menuBar()->addMenu("Ali&gn");
     auto add_align = [&](const QString& label, cadino::ui::AlignMode mode,
@@ -605,6 +610,12 @@ void MainWindow::activate_offset_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::OffsetTool>(dist));
     statusBar()->showMessage(
         "Offset — click a wall, then click the side where the parallel copy goes (Esc cancels)");
+}
+
+void MainWindow::activate_trim_extend_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::TrimExtendTool>());
+    statusBar()->showMessage(
+        "Trim/Extend — click the boundary wall, then click the wall to modify near the endpoint that should snap to the intersection");
 }
 
 void MainWindow::polar_array_dialog() {

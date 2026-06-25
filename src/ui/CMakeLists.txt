@@ -16,6 +16,7 @@ add_library(cadino_ui STATIC
     MirrorTool.cpp
     OffsetTool.cpp
     PolarArrayTool.cpp
+    TrimExtendTool.cpp
     IfcExporter.cpp
     Viewport3D.cpp
     PropertiesPanel.cpp
