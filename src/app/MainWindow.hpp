@@ -60,6 +60,7 @@ private:
     void activate_surface_tool();
     void activate_dimension_tool();
     void activate_text_tool();
+    void activate_leader_tool();
     void activate_mirror_tool();
     void rectangular_array_dialog();
     void polar_array_dialog();

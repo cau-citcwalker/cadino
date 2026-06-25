@@ -506,6 +506,36 @@ QJsonObject to_json(const cadino::core::Dimension& d) {
     return o;
 }
 
+QJsonObject to_json(const cadino::core::Leader& l) {
+    QJsonObject o;
+    o["id"] = qint64(l.id.value);
+    o["group_id"] = qint64(l.group_id.value);
+    o["layer_id"] = qint64(l.layer_id.value);
+    o["anchor"] = vec2_array(l.anchor.x(), l.anchor.y());
+    o["text_position"] = vec2_array(l.text_position.x(), l.text_position.y());
+    o["text"] = QString::fromStdString(l.text);
+    o["height"] = l.height;
+    o["arrow_size"] = l.arrow_size;
+    o["color"] = color_array(l.color);
+    return o;
+}
+
+cadino::core::Leader leader_from(const QJsonObject& o) {
+    cadino::core::Leader l;
+    l.id = cadino::core::EntityId{static_cast<std::uint64_t>(o["id"].toVariant().toULongLong())};
+    l.group_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["group_id"].toVariant().toULongLong())};
+    l.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
+    const auto a = o["anchor"].toArray();
+    const auto t = o["text_position"].toArray();
+    if (a.size() >= 2) l.anchor = {a[0].toDouble(), a[1].toDouble()};
+    if (t.size() >= 2) l.text_position = {t[0].toDouble(), t[1].toDouble()};
+    l.text = o["text"].toString().toStdString();
+    l.height = o["height"].toDouble(l.height);
+    l.arrow_size = o["arrow_size"].toDouble(l.arrow_size);
+    if (o.contains("color")) l.color = color_from(o["color"].toArray());
+    return l;
+}
+
 QJsonObject to_json(const cadino::core::TextAnnotation& t) {
     QJsonObject o;
     o["id"] = qint64(t.id.value);
@@ -628,6 +658,10 @@ bool save_document_to_file(const cadino::core::Document& doc, const QString& pat
     for (const auto& [id, t] : doc.texts()) texts_json.append(to_json(t));
     root["texts"] = texts_json;
 
+    QJsonArray leaders_json;
+    for (const auto& [id, l] : doc.leaders()) leaders_json.append(to_json(l));
+    root["leaders"] = leaders_json;
+
     QJsonArray layers_json;
     for (const auto& [id, l] : doc.layers()) layers_json.append(to_json(l));
     root["layers"] = layers_json;
@@ -746,6 +780,11 @@ bool load_document_from_file(cadino::core::Document& doc, const QString& path,
         auto t = text_from(v.toObject());
         max_id = std::max(max_id, t.id.value);
         loaded.add_text(std::move(t));
+    }
+    for (const auto& v : root["leaders"].toArray()) {
+        auto l = leader_from(v.toObject());
+        max_id = std::max(max_id, l.id.value);
+        loaded.add_leader(std::move(l));
     }
 
     cadino::core::seed_entity_id_at_least(max_id);

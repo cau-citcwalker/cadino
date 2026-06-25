@@ -86,6 +86,7 @@ private:
     void draw_surfaces(QPainter& p);
     void draw_dimensions(QPainter& p);
     void draw_texts(QPainter& p);
+    void draw_leaders(QPainter& p);
     void draw_snap_marker(QPainter& p);
     QPointF apply_snap(QPointF model_pos);
 

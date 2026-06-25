@@ -35,9 +35,11 @@
 #include "MirrorTool.hpp"
 #include "OffsetTool.hpp"
 #include "PolarArrayTool.hpp"
+#include "LeaderTool.hpp"
 #include "TextTool.hpp"
 #include "TrimExtendTool.hpp"
 
+#include "command/LeaderCommands.hpp"
 #include "command/TextAnnotationCommands.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
@@ -466,6 +468,12 @@ void MainWindow::build_toolbar() {
     group->addAction(text_action);
     connect(text_action, &QAction::triggered, this, &MainWindow::activate_text_tool);
 
+    auto* leader_action = tools->addAction("Leader");
+    leader_action->setCheckable(true);
+    leader_action->setShortcut(QKeySequence("Shift+L"));
+    group->addAction(leader_action);
+    connect(leader_action, &QAction::triggered, this, &MainWindow::activate_leader_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -568,6 +576,16 @@ void MainWindow::activate_text_tool() {
     if (!ok || text.isEmpty()) return;
     plan_view_->set_tool(std::make_unique<cadino::ui::TextTool>(text));
     statusBar()->showMessage("Text — click to place the label (Esc cancels)");
+}
+
+void MainWindow::activate_leader_tool() {
+    bool ok = false;
+    const QString text = QInputDialog::getText(
+        this, "Leader", "Callout text:", QLineEdit::Normal, "Note", &ok);
+    if (!ok || text.isEmpty()) return;
+    plan_view_->set_tool(std::make_unique<cadino::ui::LeaderTool>(text));
+    statusBar()->showMessage(
+        "Leader — click the anchor, then click where the text goes (Esc cancels)");
 }
 
 void MainWindow::activate_mirror_tool() {
@@ -1325,6 +1343,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::Text:
                 stack_.execute(std::make_unique<cadino::core::RemoveTextAnnotationCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::Leader:
+                stack_.execute(std::make_unique<cadino::core::RemoveLeaderCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

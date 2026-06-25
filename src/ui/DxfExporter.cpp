@@ -191,6 +191,16 @@ bool export_document_as_dxf(const cadino::core::Document& doc, const QString& pa
                  QString::fromStdString(t.text), "TEXT");
     }
 
+    for (const auto& [id, l] : doc.leaders()) {
+        dxf.line({l.anchor.x(), l.anchor.y()},
+                 {l.text_position.x(), l.text_position.y()}, "LEADERS");
+        // Tail under text
+        dxf.line({l.text_position.x(), l.text_position.y()},
+                 {l.text_position.x() + 100.0, l.text_position.y()}, "LEADERS");
+        dxf.text({l.text_position.x(), l.text_position.y()}, l.height, 0.0,
+                 QString::fromStdString(l.text), "LEADERS");
+    }
+
     for (const auto& [id, d] : doc.dimensions()) {
         const double dx = d.end.x() - d.start.x();
         const double dy = d.end.y() - d.start.y();

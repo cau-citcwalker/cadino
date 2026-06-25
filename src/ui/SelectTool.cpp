@@ -211,6 +211,15 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
             best = {id, SelectKind::Text};
         }
     }
+    for (const auto& [id, l] : doc.leaders()) {
+        const QPointF a{l.anchor.x(), l.anchor.y()};
+        const QPointF b{l.text_position.x(), l.text_position.y()};
+        const double d = distance_point_to_segment(model_pos, a, b);
+        if (d <= pick_radius && d < best_dist) {
+            best_dist = d;
+            best = {id, SelectKind::Leader};
+        }
+    }
     return best;
 }
 
@@ -316,6 +325,9 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
                 break;
             case SelectKind::Text:
                 if (auto* t = doc.find_text(hit.id)) layer_id = t->layer_id;
+                break;
+            case SelectKind::Leader:
+                if (auto* l = doc.find_leader(hit.id)) layer_id = l->layer_id;
                 break;
             default: break;
         }

@@ -15,6 +15,7 @@ enum class SelectKind {
     BlockInstance,
     Dimension,
     Text,
+    Leader,
 };
 
 struct Selection {

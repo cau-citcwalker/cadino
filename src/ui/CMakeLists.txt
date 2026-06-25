@@ -10,6 +10,7 @@ add_library(cadino_ui STATIC
     NurbsSurfaceTool.cpp
     DimensionTool.cpp
     TextTool.cpp
+    LeaderTool.cpp
     Alignment.cpp
     Array.cpp
     Clipboard.cpp

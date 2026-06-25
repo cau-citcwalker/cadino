@@ -13,6 +13,7 @@
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
 #include "entity/Dimension.hpp"
+#include "entity/Leader.hpp"
 #include "entity/TextAnnotation.hpp"
 
 namespace cadino::ui {
@@ -124,6 +125,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_surfaces(p);
     draw_dimensions(p);
     draw_texts(p);
+    draw_leaders(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -737,6 +739,45 @@ void PlanView::draw_dimensions(QPainter& p) {
         p.fillRect(rect.adjusted(-3, -1, 3, 1), QColor(248, 248, 248));
         p.drawText(rect, Qt::AlignCenter, label);
         p.restore();
+    }
+}
+
+void PlanView::draw_leaders(QPainter& p) {
+    for (const auto& [id, l] : document_.leaders()) {
+        if (!layer_visible(l.layer_id)) continue;
+        const QPointF a = model_to_screen({l.anchor.x(), l.anchor.y()});
+        const QPointF b = model_to_screen({l.text_position.x(), l.text_position.y()});
+
+        QPen pen(QColor::fromRgbF(l.color.r, l.color.g, l.color.b), 1.5);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.drawLine(a, b);
+        // Short underline tail under the text
+        const QPointF tail = b + QPointF(40, 0);
+        p.drawLine(b, tail);
+
+        // Arrowhead at anchor pointing from b towards a
+        const QPointF dir = (a - b);
+        const double len = std::hypot(dir.x(), dir.y());
+        if (len > 1e-3) {
+            const QPointF u = dir / len;
+            const QPointF n(-u.y(), u.x());
+            const double sz = l.arrow_size * zoom_;
+            QPolygonF tri;
+            tri << a
+                << a - u * sz + n * sz * 0.45
+                << a - u * sz - n * sz * 0.45;
+            p.setBrush(QColor::fromRgbF(l.color.r, l.color.g, l.color.b));
+            p.drawPolygon(tri);
+            p.setBrush(Qt::NoBrush);
+        }
+
+        QFont font = p.font();
+        font.setPointSizeF(std::max(8.0, l.height * zoom_ * 0.6));
+        font.setBold(true);
+        p.setFont(font);
+        p.setPen(QColor::fromRgbF(l.color.r, l.color.g, l.color.b));
+        p.drawText(b + QPointF(4, -4), QString::fromStdString(l.text));
     }
 }
 

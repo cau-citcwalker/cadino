@@ -14,6 +14,7 @@ add_library(cadino_core STATIC
     command/BlockInstanceCommands.cpp
     command/DimensionCommands.cpp
     command/TextAnnotationCommands.cpp
+    command/LeaderCommands.cpp
 )
 
 target_include_directories(cadino_core
