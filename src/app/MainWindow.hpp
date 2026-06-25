@@ -35,6 +35,15 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    // Testing accessors — allow GUI tests to drive interactions and inspect
+    // widget state without going through file/colour dialogs.
+    [[nodiscard]] cadino::ui::PlanView* plan_view_widget() noexcept { return plan_view_; }
+    [[nodiscard]] cadino::ui::Viewport3D* viewport_3d_widget() noexcept { return viewport_3d_; }
+    [[nodiscard]] cadino::ui::PropertiesPanel* properties_panel_widget() noexcept { return properties_; }
+    [[nodiscard]] cadino::ui::LayerPanel* layer_panel_widget() noexcept { return layer_panel_; }
+    [[nodiscard]] cadino::core::Document& document() noexcept { return document_; }
+    [[nodiscard]] cadino::core::CommandStack& command_stack() noexcept { return stack_; }
+
 private:
     void build_menu();
     void build_toolbar();

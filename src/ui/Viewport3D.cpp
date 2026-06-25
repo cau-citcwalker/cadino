@@ -751,6 +751,16 @@ QMatrix4x4 Viewport3D::projection_matrix() const {
     return p;
 }
 
+QPointF Viewport3D::world_to_screen(QVector3D world) const {
+    const QMatrix4x4 vp = projection_matrix() * view_matrix();
+    QVector4D clip = vp * QVector4D(world.x(), world.y(), world.z(), 1.0f);
+    if (clip.w() < 1e-6f) return {-1e9, -1e9};
+    clip /= clip.w();
+    const float sx = (clip.x() + 1.0f) * 0.5f * static_cast<float>(width());
+    const float sy = (1.0f - clip.y()) * 0.5f * static_cast<float>(height());
+    return {sx, sy};
+}
+
 void Viewport3D::set_preset(CameraPreset preset) {
     preset_ = preset;
     switch (preset) {

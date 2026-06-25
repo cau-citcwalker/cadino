@@ -30,3 +30,25 @@ target_link_libraries(cadino_smoke_tests
 )
 
 catch_discover_tests(cadino_smoke_tests)
+
+# Full GUI end-to-end: synthesizes mouse events on real widgets under the
+# offscreen QPA plugin. Provides its own QApplication-bearing main().
+add_executable(cadino_gui_tests
+    test_gui.cpp
+)
+
+target_link_libraries(cadino_gui_tests
+    PRIVATE
+        cadino_app
+        cadino_core
+        cadino_ui
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Test
+        Catch2::Catch2
+)
+
+set_target_properties(cadino_gui_tests PROPERTIES AUTOMOC ON)
+
+catch_discover_tests(cadino_gui_tests)

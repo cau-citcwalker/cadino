@@ -48,6 +48,15 @@ public:
     void set_preset(CameraPreset preset);
     [[nodiscard]] CameraPreset preset() const noexcept { return preset_; }
 
+    // Project a world-space point onto current screen pixels. Used by tests
+    // to locate gizmo handles for QTest mouse synthesis.
+    [[nodiscard]] QPointF world_to_screen(QVector3D world) const;
+    [[nodiscard]] QVector3D selection_centroid_for_test() const {
+        QVector3D out;
+        selection_centroid(out);
+        return out;
+    }
+
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
