@@ -61,6 +61,7 @@ private:
     void activate_dimension_tool();
     void activate_text_tool();
     void activate_leader_tool();
+    void activate_angular_dim_tool();
     void activate_mirror_tool();
     void rectangular_array_dialog();
     void polar_array_dialog();

@@ -12,6 +12,7 @@
 #include "Tool.hpp"
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
+#include "entity/AngularDimension.hpp"
 #include "entity/Dimension.hpp"
 #include "entity/Leader.hpp"
 #include "entity/TextAnnotation.hpp"
@@ -126,6 +127,7 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_dimensions(p);
     draw_texts(p);
     draw_leaders(p);
+    draw_angular_dims(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -739,6 +741,59 @@ void PlanView::draw_dimensions(QPainter& p) {
         p.fillRect(rect.adjusted(-3, -1, 3, 1), QColor(248, 248, 248));
         p.drawText(rect, Qt::AlignCenter, label);
         p.restore();
+    }
+}
+
+void PlanView::draw_angular_dims(QPainter& p) {
+    for (const auto& [id, ad] : document_.angular_dims()) {
+        if (!layer_visible(ad.layer_id)) continue;
+
+        const double a1 = std::atan2(ad.p1.y() - ad.vertex.y(),
+                                     ad.p1.x() - ad.vertex.x());
+        const double sweep = ad.angle_rad();
+        const double r = ad.radius;
+        const QPointF v = model_to_screen({ad.vertex.x(), ad.vertex.y()});
+
+        QPen pen(QColor::fromRgbF(ad.color.r, ad.color.g, ad.color.b), 1.5);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+
+        // Extension lines from vertex out past the arc radius along both arms.
+        const QPointF arm1_far_m{ad.vertex.x() + std::cos(a1) * r * 1.1,
+                                 ad.vertex.y() + std::sin(a1) * r * 1.1};
+        const QPointF arm2_far_m{ad.vertex.x() + std::cos(a1 + sweep) * r * 1.1,
+                                 ad.vertex.y() + std::sin(a1 + sweep) * r * 1.1};
+        p.drawLine(v, model_to_screen(arm1_far_m));
+        p.drawLine(v, model_to_screen(arm2_far_m));
+
+        // Arc — sample as a polyline.
+        constexpr int kSamples = 40;
+        QPolygonF arc;
+        for (int i = 0; i <= kSamples; ++i) {
+            const double t = static_cast<double>(i) / kSamples;
+            const double ang = a1 + sweep * t;
+            arc << model_to_screen({ad.vertex.x() + std::cos(ang) * r,
+                                    ad.vertex.y() + std::sin(ang) * r});
+        }
+        p.drawPolyline(arc);
+
+        // Angle label centered on the arc midpoint.
+        const double mid = a1 + sweep * 0.5;
+        const QPointF label_pt = model_to_screen(
+            {ad.vertex.x() + std::cos(mid) * (r + ad.text_height * 0.6),
+             ad.vertex.y() + std::sin(mid) * (r + ad.text_height * 0.6)});
+
+        const QString label = ad.text_override.empty()
+            ? QString::number(sweep * 180.0 / 3.14159265358979323846, 'f', 1) + QStringLiteral(" deg")
+            : QString::fromStdString(ad.text_override);
+
+        QFont font = p.font();
+        font.setPointSizeF(std::max(8.0, ad.text_height * zoom_ * 0.6));
+        font.setBold(true);
+        p.setFont(font);
+        p.setPen(QColor::fromRgbF(ad.color.r, ad.color.g, ad.color.b));
+        p.drawText(label_pt, label);
     }
 }
 

@@ -2,6 +2,7 @@ add_library(cadino_core STATIC
     entity/Wall.cpp
     entity/NurbsCurve.cpp
     entity/NurbsSurface.cpp
+    entity/AngularDimension.cpp
     document/Document.cpp
     command/CommandStack.cpp
     command/WallCommands.cpp
@@ -15,6 +16,7 @@ add_library(cadino_core STATIC
     command/DimensionCommands.cpp
     command/TextAnnotationCommands.cpp
     command/LeaderCommands.cpp
+    command/AngularDimensionCommands.cpp
 )
 
 target_include_directories(cadino_core

@@ -35,10 +35,12 @@
 #include "MirrorTool.hpp"
 #include "OffsetTool.hpp"
 #include "PolarArrayTool.hpp"
+#include "AngularDimensionTool.hpp"
 #include "LeaderTool.hpp"
 #include "TextTool.hpp"
 #include "TrimExtendTool.hpp"
 
+#include "command/AngularDimensionCommands.hpp"
 #include "command/LeaderCommands.hpp"
 #include "command/TextAnnotationCommands.hpp"
 #include "CylinderTool.hpp"
@@ -474,6 +476,12 @@ void MainWindow::build_toolbar() {
     group->addAction(leader_action);
     connect(leader_action, &QAction::triggered, this, &MainWindow::activate_leader_tool);
 
+    auto* ang_action = tools->addAction("Angle");
+    ang_action->setCheckable(true);
+    ang_action->setShortcut(QKeySequence("Shift+A"));
+    group->addAction(ang_action);
+    connect(ang_action, &QAction::triggered, this, &MainWindow::activate_angular_dim_tool);
+
     tools->addSeparator();
     tools->addAction(undo_action_);
     tools->addAction(redo_action_);
@@ -586,6 +594,12 @@ void MainWindow::activate_leader_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::LeaderTool>(text));
     statusBar()->showMessage(
         "Leader — click the anchor, then click where the text goes (Esc cancels)");
+}
+
+void MainWindow::activate_angular_dim_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::AngularDimensionTool>());
+    statusBar()->showMessage(
+        "Angular dim — click the vertex, then a point on each arm (Esc cancels)");
 }
 
 void MainWindow::activate_mirror_tool() {
@@ -1346,6 +1360,9 @@ void MainWindow::delete_selected() {
                 break;
             case cadino::ui::SelectKind::Leader:
                 stack_.execute(std::make_unique<cadino::core::RemoveLeaderCommand>(sel.id));
+                break;
+            case cadino::ui::SelectKind::AngularDimension:
+                stack_.execute(std::make_unique<cadino::core::RemoveAngularDimensionCommand>(sel.id));
                 break;
             case cadino::ui::SelectKind::None:
                 break;

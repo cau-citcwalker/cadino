@@ -201,6 +201,39 @@ bool export_document_as_dxf(const cadino::core::Document& doc, const QString& pa
                  QString::fromStdString(l.text), "LEADERS");
     }
 
+    for (const auto& [id, ad] : doc.angular_dims()) {
+        const double a1 = std::atan2(ad.p1.y() - ad.vertex.y(),
+                                     ad.p1.x() - ad.vertex.x());
+        const double sweep = ad.angle_rad();
+        // Arc samples emitted as a LWPOLYLINE.
+        constexpr int kSamples = 36;
+        std::vector<QPointF> arc;
+        arc.reserve(kSamples + 1);
+        for (int i = 0; i <= kSamples; ++i) {
+            const double t = static_cast<double>(i) / kSamples;
+            const double ang = a1 + sweep * t;
+            arc.emplace_back(ad.vertex.x() + std::cos(ang) * ad.radius,
+                             ad.vertex.y() + std::sin(ang) * ad.radius);
+        }
+        dxf.lwpolyline(arc, false, "DIMENSIONS");
+        // Extension lines.
+        dxf.line({ad.vertex.x(), ad.vertex.y()},
+                 {ad.vertex.x() + std::cos(a1) * ad.radius * 1.1,
+                  ad.vertex.y() + std::sin(a1) * ad.radius * 1.1}, "DIMENSIONS");
+        dxf.line({ad.vertex.x(), ad.vertex.y()},
+                 {ad.vertex.x() + std::cos(a1 + sweep) * ad.radius * 1.1,
+                  ad.vertex.y() + std::sin(a1 + sweep) * ad.radius * 1.1},
+                 "DIMENSIONS");
+        // Label.
+        const double mid = a1 + sweep * 0.5;
+        const QString label = ad.text_override.empty()
+            ? QString::number(sweep * 180.0 / std::numbers::pi, 'f', 1) + QStringLiteral(" deg")
+            : QString::fromStdString(ad.text_override);
+        dxf.text({ad.vertex.x() + std::cos(mid) * (ad.radius + ad.text_height * 0.6),
+                  ad.vertex.y() + std::sin(mid) * (ad.radius + ad.text_height * 0.6)},
+                 ad.text_height, 0.0, label, "DIMENSIONS");
+    }
+
     for (const auto& [id, d] : doc.dimensions()) {
         const double dx = d.end.x() - d.start.x();
         const double dy = d.end.y() - d.start.y();

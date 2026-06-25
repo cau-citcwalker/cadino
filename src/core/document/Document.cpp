@@ -87,6 +87,10 @@ EntityId Document::add_leader(Leader l) {
     if (!l.layer_id.valid()) l.layer_id = active_layer_;
     return insert_with_id(leaders_, std::move(l));
 }
+EntityId Document::add_angular_dim(AngularDimension a) {
+    if (!a.layer_id.valid()) a.layer_id = active_layer_;
+    return insert_with_id(angular_dims_, std::move(a));
+}
 
 const Wall*   Document::find_wall(EntityId id)   const { return find_in(walls_,   id); }
 Wall*         Document::find_wall(EntityId id)         { return find_in(walls_,   id); }
@@ -118,6 +122,8 @@ const TextAnnotation*  Document::find_text(EntityId id) const { return find_in(t
 TextAnnotation*        Document::find_text(EntityId id)       { return find_in(texts_, id); }
 const Leader*          Document::find_leader(EntityId id) const { return find_in(leaders_, id); }
 Leader*                Document::find_leader(EntityId id)       { return find_in(leaders_, id); }
+const AngularDimension* Document::find_angular_dim(EntityId id) const { return find_in(angular_dims_, id); }
+AngularDimension*       Document::find_angular_dim(EntityId id)       { return find_in(angular_dims_, id); }
 
 bool Document::remove_wall(EntityId id)   { return walls_.erase(id)   > 0; }
 bool Document::remove_door(EntityId id)   { return doors_.erase(id)   > 0; }
@@ -134,5 +140,6 @@ bool Document::remove_block_instance(EntityId id){ return block_instances_.erase
 bool Document::remove_dimension(EntityId id){ return dimensions_.erase(id) > 0; }
 bool Document::remove_text(EntityId id){ return texts_.erase(id) > 0; }
 bool Document::remove_leader(EntityId id){ return leaders_.erase(id) > 0; }
+bool Document::remove_angular_dim(EntityId id){ return angular_dims_.erase(id) > 0; }
 
 }  // namespace cadino::core
