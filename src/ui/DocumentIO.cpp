@@ -446,6 +446,9 @@ QJsonObject to_json(const cadino::core::Slab& s) {
     o["outline"] = outline;
     o["level"] = s.level;
     o["thickness"] = s.thickness;
+    o["hatch_pattern"] = s.hatch_pattern;
+    o["hatch_color"] = color_array(s.hatch_color);
+    o["hatch_scale"] = s.hatch_scale;
     return o;
 }
 
@@ -482,6 +485,9 @@ cadino::core::Slab slab_from(const QJsonObject& o) {
     }
     s.level = o["level"].toDouble(s.level);
     s.thickness = o["thickness"].toDouble(s.thickness);
+    s.hatch_pattern = o["hatch_pattern"].toInt(s.hatch_pattern);
+    if (o.contains("hatch_color")) s.hatch_color = color_from(o["hatch_color"].toArray());
+    s.hatch_scale = o["hatch_scale"].toDouble(s.hatch_scale);
     return s;
 }
 

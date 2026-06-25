@@ -131,10 +131,8 @@ void PlanView::paintEvent(QPaintEvent*) {
 }
 
 void PlanView::draw_slabs(QPainter& p) {
-    QPen pen(QColor(120, 90, 60), 1, Qt::DotLine);
-    pen.setCosmetic(true);
-    p.setPen(pen);
-    p.setBrush(QColor(190, 165, 130, 50));
+    QPen border(QColor(120, 90, 60), 1, Qt::DotLine);
+    border.setCosmetic(true);
 
     for (const auto& [id, s] : document_.slabs()) {
         if (!layer_visible(s.layer_id)) continue;
@@ -143,6 +141,22 @@ void PlanView::draw_slabs(QPainter& p) {
         for (const auto& v : s.outline) {
             poly << model_to_screen({v.x(), v.y()});
         }
+
+        QBrush brush;
+        const QColor c = QColor::fromRgbF(s.hatch_color.r, s.hatch_color.g,
+                                          s.hatch_color.b);
+        switch (s.hatch_pattern) {
+            case 1: brush = QBrush(c.lighter(150), Qt::SolidPattern); break;
+            case 2: brush = QBrush(c, Qt::HorPattern); break;
+            case 3: brush = QBrush(c, Qt::VerPattern); break;
+            case 4: brush = QBrush(c, Qt::CrossPattern); break;
+            case 5: brush = QBrush(c, Qt::BDiagPattern); break;
+            case 6: brush = QBrush(c, Qt::FDiagPattern); break;
+            case 7: brush = QBrush(c, Qt::DiagCrossPattern); break;
+            default: brush = QBrush(QColor(190, 165, 130, 50)); break;
+        }
+        p.setPen(border);
+        p.setBrush(brush);
         p.drawPolygon(poly);
     }
 }
