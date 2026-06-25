@@ -16,8 +16,14 @@
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QPushButton>
+#include <QSaveFile>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QTableWidget>
+#include <QTextStream>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
@@ -220,6 +226,11 @@ void MainWindow::build_menu() {
 
     auto* export_ifc_a = file_menu->addAction("Export &IFC...");
     connect(export_ifc_a, &QAction::triggered, this, &MainWindow::export_ifc);
+
+    file_menu->addSeparator();
+    auto* schedule_a = file_menu->addAction("&Schedule...");
+    schedule_a->setShortcut(QKeySequence("Ctrl+Shift+S"));
+    connect(schedule_a, &QAction::triggered, this, &MainWindow::show_schedule);
 
 #ifndef CADINO_HAS_OPENNURBS
     import_3dm_a->setEnabled(false);
@@ -888,6 +899,137 @@ void MainWindow::export_stl() {
         return;
     }
     statusBar()->showMessage(QString("Exported STL to %1").arg(path));
+}
+
+namespace {
+struct ScheduleRow {
+    QString type;
+    QString detail;
+    QString quantity;
+};
+
+double slab_area(const cadino::core::Slab& s) {
+    if (s.outline.size() < 3) return 0.0;
+    double area = 0.0;
+    for (std::size_t i = 0; i < s.outline.size(); ++i) {
+        const auto& p = s.outline[i];
+        const auto& q = s.outline[(i + 1) % s.outline.size()];
+        area += p.x() * q.y() - q.x() * p.y();
+    }
+    return std::abs(area) * 0.5;
+}
+}  // namespace
+
+void MainWindow::show_schedule() {
+    std::vector<ScheduleRow> rows;
+    for (const auto& [id, w] : document_.walls()) {
+        const double len = (w.end - w.start).norm();
+        rows.push_back({"Wall",
+            QString("len=%1mm thk=%2mm h=%3mm").arg(len, 0, 'f', 1)
+                .arg(w.thickness, 0, 'f', 0).arg(w.height, 0, 'f', 0),
+            "1"});
+    }
+    for (const auto& [id, d] : document_.doors()) {
+        rows.push_back({"Door",
+            QString("w=%1mm h=%2mm").arg(d.width, 0, 'f', 0).arg(d.height, 0, 'f', 0),
+            "1"});
+    }
+    for (const auto& [id, w] : document_.windows()) {
+        rows.push_back({"Window",
+            QString("w=%1mm h=%2mm sill=%3mm")
+                .arg(w.width, 0, 'f', 0).arg(w.height, 0, 'f', 0).arg(w.sill_height, 0, 'f', 0),
+            "1"});
+    }
+    for (const auto& [id, b] : document_.boxes()) {
+        rows.push_back({"Box",
+            QString("%1x%2 h=%3mm").arg(b.size_xy.x(), 0, 'f', 0)
+                .arg(b.size_xy.y(), 0, 'f', 0).arg(b.height, 0, 'f', 0),
+            "1"});
+    }
+    for (const auto& [id, c] : document_.cylinders()) {
+        rows.push_back({"Cylinder",
+            QString("Ø %1mm h=%2mm").arg(c.radius * 2.0, 0, 'f', 0)
+                .arg(c.height, 0, 'f', 0),
+            "1"});
+    }
+    for (const auto& [id, s] : document_.slabs()) {
+        rows.push_back({"Slab",
+            QString("area=%1 m^2 t=%2mm")
+                .arg(slab_area(s) / 1.0e6, 0, 'f', 2).arg(s.thickness, 0, 'f', 0),
+            "1"});
+    }
+    for (const auto& [id, i] : document_.block_instances()) {
+        QString name = "(missing)";
+        if (const auto* def = document_.find_block_def(i.definition_id)) {
+            name = QString::fromStdString(def->name);
+        }
+        rows.push_back({"Block instance",
+            QString("def=\"%1\" pos=(%2,%3)").arg(name)
+                .arg(i.position.x(), 0, 'f', 0).arg(i.position.y(), 0, 'f', 0),
+            "1"});
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Schedule");
+    dlg.resize(720, 480);
+    auto* outer = new QVBoxLayout(&dlg);
+
+    auto* totals = new QLabel(&dlg);
+    totals->setText(QString(
+        "Walls: %1, Doors: %2, Windows: %3, Boxes: %4, Cylinders: %5, "
+        "Slabs: %6, Block instances: %7")
+        .arg(document_.walls().size())
+        .arg(document_.doors().size())
+        .arg(document_.windows().size())
+        .arg(document_.boxes().size())
+        .arg(document_.cylinders().size())
+        .arg(document_.slabs().size())
+        .arg(document_.block_instances().size()));
+    outer->addWidget(totals);
+
+    auto* table = new QTableWidget(&dlg);
+    table->setColumnCount(3);
+    table->setHorizontalHeaderLabels({"Type", "Details", "Qty"});
+    table->setRowCount(static_cast<int>(rows.size()));
+    for (int r = 0; r < static_cast<int>(rows.size()); ++r) {
+        table->setItem(r, 0, new QTableWidgetItem(rows[r].type));
+        table->setItem(r, 1, new QTableWidgetItem(rows[r].detail));
+        table->setItem(r, 2, new QTableWidgetItem(rows[r].quantity));
+    }
+    table->horizontalHeader()->setStretchLastSection(true);
+    outer->addWidget(table);
+
+    auto* btns = new QHBoxLayout();
+    auto* csv = new QPushButton("Export CSV...", &dlg);
+    auto* close = new QPushButton("Close", &dlg);
+    btns->addWidget(csv);
+    btns->addStretch();
+    btns->addWidget(close);
+    outer->addLayout(btns);
+
+    connect(close, &QPushButton::clicked, &dlg, &QDialog::accept);
+    connect(csv, &QPushButton::clicked, this, [this, &rows]() {
+        QString path = QFileDialog::getSaveFileName(
+            this, "Export schedule CSV", current_file_path_,
+            "CSV (*.csv)");
+        if (path.isEmpty()) return;
+        if (!path.endsWith(".csv", Qt::CaseInsensitive)) path += ".csv";
+        QSaveFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QMessageBox::warning(this, "Export failed", f.errorString());
+            return;
+        }
+        QTextStream out(&f);
+        out << "Type,Details,Qty\n";
+        for (const auto& r : rows) {
+            QString d = r.detail;
+            d.replace('"', "\"\"");
+            out << r.type << ",\"" << d << "\"," << r.quantity << "\n";
+        }
+        f.commit();
+        statusBar()->showMessage(QString("Schedule exported to %1").arg(path));
+    });
+    dlg.exec();
 }
 
 void MainWindow::export_ifc() {
