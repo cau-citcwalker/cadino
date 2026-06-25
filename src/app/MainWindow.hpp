@@ -62,6 +62,7 @@ private:
     void activate_mirror_tool();
     void rectangular_array_dialog();
     void polar_array_dialog();
+    void activate_offset_tool();
     void copy_selected();
     void paste_clipboard();
     void duplicate_selected();

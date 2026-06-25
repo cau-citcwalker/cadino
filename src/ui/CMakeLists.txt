@@ -14,6 +14,7 @@ add_library(cadino_ui STATIC
     Clipboard.cpp
     Mirror.cpp
     MirrorTool.cpp
+    OffsetTool.cpp
     PolarArrayTool.cpp
     IfcExporter.cpp
     Viewport3D.cpp

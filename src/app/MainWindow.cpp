@@ -33,6 +33,7 @@
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
 #include "MirrorTool.hpp"
+#include "OffsetTool.hpp"
 #include "PolarArrayTool.hpp"
 #include "CylinderTool.hpp"
 #include "DocumentIO.hpp"
@@ -306,6 +307,10 @@ void MainWindow::build_menu() {
     auto* polar_array_a = edit_menu->addAction("Po&lar Array...");
     polar_array_a->setShortcut(QKeySequence("Ctrl+Alt+P"));
     connect(polar_array_a, &QAction::triggered, this, &MainWindow::polar_array_dialog);
+
+    auto* offset_a = edit_menu->addAction("&Offset Wall...");
+    offset_a->setShortcut(QKeySequence("Ctrl+Alt+O"));
+    connect(offset_a, &QAction::triggered, this, &MainWindow::activate_offset_tool);
 
     auto* align_menu = menuBar()->addMenu("Ali&gn");
     auto add_align = [&](const QString& label, cadino::ui::AlignMode mode,
@@ -589,6 +594,17 @@ void MainWindow::rectangular_array_dialog() {
         rows->value(), cols->value(), dx->value(), dy->value());
     plan_view_->notify_document_modified();
     statusBar()->showMessage(QString("Rectangular array created %1 copies").arg(n));
+}
+
+void MainWindow::activate_offset_tool() {
+    bool ok = false;
+    const double dist = QInputDialog::getDouble(
+        this, "Offset Wall", "Distance (mm):", 500.0,
+        -100'000.0, 100'000.0, 1, &ok);
+    if (!ok) return;
+    plan_view_->set_tool(std::make_unique<cadino::ui::OffsetTool>(dist));
+    statusBar()->showMessage(
+        "Offset — click a wall, then click the side where the parallel copy goes (Esc cancels)");
 }
 
 void MainWindow::polar_array_dialog() {
