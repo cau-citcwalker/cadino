@@ -38,6 +38,8 @@
 #include "Alignment.hpp"
 #include "Array.hpp"
 #include "Clipboard.hpp"
+#include <QSettings>
+
 #include "MaterialLibrary.hpp"
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
@@ -190,6 +192,9 @@ void MainWindow::build_menu() {
     auto* open_a = file_menu->addAction("&Open...");
     open_a->setShortcut(QKeySequence::Open);
     connect(open_a, &QAction::triggered, this, &MainWindow::open_document);
+
+    recent_menu_ = file_menu->addMenu("Open &Recent");
+    rebuild_recent_menu();
 
     auto* save_a = file_menu->addAction("&Save");
     save_a->setShortcut(QKeySequence::Save);
@@ -871,7 +876,10 @@ void MainWindow::open_document() {
         this, "Open Cadino document", current_file_path_,
         "Cadino documents (*.cadino);;JSON (*.json);;All files (*)");
     if (path.isEmpty()) return;
+    open_path(path);
+}
 
+void MainWindow::open_path(const QString& path) {
     QString error;
     if (!cadino::ui::load_document_from_file(document_, path, &error)) {
         QMessageBox::warning(this, "Open failed", error);
@@ -885,6 +893,41 @@ void MainWindow::open_document() {
     current_file_path_ = path;
     setWindowTitle(QString("Cadino — %1").arg(QFileInfo(path).fileName()));
     statusBar()->showMessage(QString("Opened %1").arg(path));
+    add_recent(path);
+}
+
+void MainWindow::add_recent(const QString& path) {
+    QSettings s("Cadino", "Cadino");
+    QStringList list = s.value("recent_files").toStringList();
+    list.removeAll(path);
+    list.prepend(path);
+    while (list.size() > 10) list.removeLast();
+    s.setValue("recent_files", list);
+    rebuild_recent_menu();
+}
+
+void MainWindow::rebuild_recent_menu() {
+    if (!recent_menu_) return;
+    recent_menu_->clear();
+    QSettings s("Cadino", "Cadino");
+    const QStringList list = s.value("recent_files").toStringList();
+    if (list.isEmpty()) {
+        auto* a = recent_menu_->addAction("(empty)");
+        a->setEnabled(false);
+        return;
+    }
+    for (const auto& path : list) {
+        const QString label = QFileInfo(path).fileName() + "  —  " + path;
+        auto* a = recent_menu_->addAction(label);
+        connect(a, &QAction::triggered, this, [this, path] { open_path(path); });
+    }
+    recent_menu_->addSeparator();
+    auto* clear_a = recent_menu_->addAction("Clear");
+    connect(clear_a, &QAction::triggered, this, [this] {
+        QSettings s("Cadino", "Cadino");
+        s.remove("recent_files");
+        rebuild_recent_menu();
+    });
 }
 
 bool MainWindow::save_document() {
@@ -895,6 +938,7 @@ bool MainWindow::save_document() {
         return false;
     }
     statusBar()->showMessage(QString("Saved %1").arg(current_file_path_));
+    add_recent(current_file_path_);
     return true;
 }
 

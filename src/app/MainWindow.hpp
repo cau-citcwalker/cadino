@@ -83,6 +83,9 @@ private:
     void intersect_selected();
     void new_document();
     void open_document();
+    void open_path(const QString& path);
+    void add_recent(const QString& path);
+    void rebuild_recent_menu();
     bool save_document();
     bool save_document_as();
     void export_dxf();
@@ -137,6 +140,7 @@ private:
     ViewMode view_mode_{ViewMode::Split};
     QString current_file_path_{};
     class QMenu* materials_menu_{nullptr};
+    class QMenu* recent_menu_{nullptr};
 };
 
 }  // namespace cadino::app
