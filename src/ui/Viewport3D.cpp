@@ -184,10 +184,16 @@ void main() {
     Lo += brdf_lobe(N, V, fill_dir, fill_color, albedo, roughness, metallic);
     Lo += brdf_lobe(N, V, sky_dir, sky_color, albedo, roughness, metallic);
 
-    // Ambient term tinted with hemisphere lighting
+    // Ambient term tinted with hemisphere lighting + cheap fake AO that
+    // darkens downward-facing fragments and surfaces close to the ground
+    // plane (mimics corner/contact occlusion in interior scenes).
     float up = N.z * 0.5 + 0.5;
     vec3 ambient_color = mix(vec3(0.12, 0.10, 0.09), vec3(0.30, 0.34, 0.40), up);
-    vec3 ambient = albedo * ambient_color * (1.0 - metallic * 0.6);
+    float face_ao = mix(0.55, 1.0, up);
+    float ground_proximity = clamp(v_world.z / 400.0, 0.0, 1.0);
+    float floor_contact_ao = mix(0.75, 1.0, ground_proximity);
+    float ao = face_ao * floor_contact_ao;
+    vec3 ambient = albedo * ambient_color * (1.0 - metallic * 0.6) * ao;
 
     vec3 col = ambient + Lo;
     // Reinhard tone mapping + slight gamma compensation
