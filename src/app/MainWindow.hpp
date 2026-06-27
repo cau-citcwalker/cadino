@@ -97,6 +97,7 @@ private:
     void show_schedule();
     void set_section_axis(int axis, double position);  // axis: -1 off, 0 X, 1 Y, 2 Z
     void show_sun_dialog();
+    void show_preferences_dialog();
     void save_selection_material();
     void apply_material(const std::string& name);
     void rebuild_materials_menu();

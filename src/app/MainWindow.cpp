@@ -3,6 +3,8 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -117,6 +119,22 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             &cadino::ui::LayerPanel::refresh);
 
     activate_select_tool();
+
+    // Apply user snap preferences before the first paint.
+    {
+        QSettings s("Cadino", "Cadino");
+        auto& snap = plan_view_->snap_engine();
+        snap.set_grid_step(s.value("snap/grid_step", snap.grid_step()).toDouble());
+        snap.set_grid_enabled(s.value("snap/grid", snap.grid_enabled()).toBool());
+        snap.set_endpoint_enabled(s.value("snap/endpoint", snap.endpoint_enabled()).toBool());
+        snap.set_midpoint_enabled(s.value("snap/midpoint", snap.midpoint_enabled()).toBool());
+        snap.set_corner_enabled(s.value("snap/corner", snap.corner_enabled()).toBool());
+        snap.set_center_enabled(s.value("snap/center", snap.center_enabled()).toBool());
+        snap.set_intersection_enabled(s.value("snap/intersection", snap.intersection_enabled()).toBool());
+        snap.set_perpendicular_enabled(s.value("snap/perpendicular", snap.perpendicular_enabled()).toBool());
+        snap.set_nearest_enabled(s.value("snap/nearest", snap.nearest_enabled()).toBool());
+    }
+
     // Defer the initial mode switch until after Qt finishes the first window
     // layout. Calling set_view_mode (which toggles widget visibility) during
     // construction races with the QSplitter measure pass and leaves both
@@ -195,6 +213,11 @@ void MainWindow::build_menu() {
 
     recent_menu_ = file_menu->addMenu("Open &Recent");
     rebuild_recent_menu();
+
+    file_menu->addSeparator();
+    auto* prefs_a = file_menu->addAction("Pre&ferences...");
+    prefs_a->setShortcut(QKeySequence("Ctrl+,"));
+    connect(prefs_a, &QAction::triggered, this, &MainWindow::show_preferences_dialog);
 
     auto* save_a = file_menu->addAction("&Save");
     save_a->setShortcut(QKeySequence::Save);
@@ -1062,6 +1085,78 @@ void MainWindow::apply_material(const std::string& name) {
     statusBar()->showMessage(
         QString("Applied preset \"%1\" to %2 entities")
             .arg(QString::fromStdString(name)).arg(n));
+}
+
+void MainWindow::show_preferences_dialog() {
+    QDialog dlg(this);
+    dlg.setWindowTitle("Preferences");
+    dlg.resize(380, 420);
+    auto* form = new QFormLayout(&dlg);
+
+    QSettings s("Cadino", "Cadino");
+    auto& snap = plan_view_->snap_engine();
+
+    auto* grid_step = new QDoubleSpinBox(&dlg);
+    grid_step->setRange(1.0, 100000.0);
+    grid_step->setDecimals(1);
+    grid_step->setSuffix(" mm");
+    grid_step->setValue(snap.grid_step());
+
+    auto* cb_grid = new QCheckBox("Grid", &dlg); cb_grid->setChecked(snap.grid_enabled());
+    auto* cb_endpoint = new QCheckBox("Endpoint", &dlg); cb_endpoint->setChecked(snap.endpoint_enabled());
+    auto* cb_midpoint = new QCheckBox("Midpoint", &dlg); cb_midpoint->setChecked(snap.midpoint_enabled());
+    auto* cb_corner = new QCheckBox("Corner", &dlg); cb_corner->setChecked(snap.corner_enabled());
+    auto* cb_center = new QCheckBox("Center", &dlg); cb_center->setChecked(snap.center_enabled());
+    auto* cb_intersection = new QCheckBox("Intersection", &dlg); cb_intersection->setChecked(snap.intersection_enabled());
+    auto* cb_perpendicular = new QCheckBox("Perpendicular", &dlg); cb_perpendicular->setChecked(snap.perpendicular_enabled());
+    auto* cb_nearest = new QCheckBox("Nearest", &dlg); cb_nearest->setChecked(snap.nearest_enabled());
+
+    auto* units = new QComboBox(&dlg);
+    units->addItems({"mm", "cm", "m", "inch"});
+    units->setCurrentText(s.value("display_units", "mm").toString());
+
+    form->addRow("Display units", units);
+    form->addRow("Grid step", grid_step);
+    form->addRow(new QLabel("Snap kinds:", &dlg));
+    form->addRow(cb_grid);
+    form->addRow(cb_endpoint);
+    form->addRow(cb_midpoint);
+    form->addRow(cb_corner);
+    form->addRow(cb_center);
+    form->addRow(cb_intersection);
+    form->addRow(cb_perpendicular);
+    form->addRow(cb_nearest);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    snap.set_grid_step(grid_step->value());
+    snap.set_grid_enabled(cb_grid->isChecked());
+    snap.set_endpoint_enabled(cb_endpoint->isChecked());
+    snap.set_midpoint_enabled(cb_midpoint->isChecked());
+    snap.set_corner_enabled(cb_corner->isChecked());
+    snap.set_center_enabled(cb_center->isChecked());
+    snap.set_intersection_enabled(cb_intersection->isChecked());
+    snap.set_perpendicular_enabled(cb_perpendicular->isChecked());
+    snap.set_nearest_enabled(cb_nearest->isChecked());
+
+    s.setValue("display_units", units->currentText());
+    s.setValue("snap/grid_step", grid_step->value());
+    s.setValue("snap/grid", cb_grid->isChecked());
+    s.setValue("snap/endpoint", cb_endpoint->isChecked());
+    s.setValue("snap/midpoint", cb_midpoint->isChecked());
+    s.setValue("snap/corner", cb_corner->isChecked());
+    s.setValue("snap/center", cb_center->isChecked());
+    s.setValue("snap/intersection", cb_intersection->isChecked());
+    s.setValue("snap/perpendicular", cb_perpendicular->isChecked());
+    s.setValue("snap/nearest", cb_nearest->isChecked());
+
+    statusBar()->showMessage("Preferences saved");
 }
 
 void MainWindow::show_sun_dialog() {
