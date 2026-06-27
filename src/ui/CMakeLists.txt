@@ -16,6 +16,7 @@ add_library(cadino_ui STATIC
     Alignment.cpp
     Array.cpp
     Clipboard.cpp
+    MaterialLibrary.cpp
     Mirror.cpp
     MirrorTool.cpp
     OffsetTool.cpp

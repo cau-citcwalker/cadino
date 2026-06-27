@@ -15,6 +15,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenuBar>
+#include <QMenu>
 #include <QMessageBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -37,6 +38,7 @@
 #include "Alignment.hpp"
 #include "Array.hpp"
 #include "Clipboard.hpp"
+#include "MaterialLibrary.hpp"
 #include "DimensionTool.hpp"
 #include "LayerPanel.hpp"
 #include "MirrorTool.hpp"
@@ -337,6 +339,9 @@ void MainWindow::build_menu() {
     auto* trim_a = edit_menu->addAction("&Trim / Extend Wall");
     trim_a->setShortcut(QKeySequence("Ctrl+Alt+T"));
     connect(trim_a, &QAction::triggered, this, &MainWindow::activate_trim_extend_tool);
+
+    materials_menu_ = menuBar()->addMenu("Mate&rials");
+    rebuild_materials_menu();
 
     auto* align_menu = menuBar()->addMenu("Ali&gn");
     auto add_align = [&](const QString& label, cadino::ui::AlignMode mode,
@@ -953,6 +958,67 @@ double slab_area(const cadino::core::Slab& s) {
     return std::abs(area) * 0.5;
 }
 }  // namespace
+
+void MainWindow::rebuild_materials_menu() {
+    if (!materials_menu_) return;
+    materials_menu_->clear();
+
+    auto* save_a = materials_menu_->addAction("Save Selection as Preset...");
+    connect(save_a, &QAction::triggered, this, &MainWindow::save_selection_material);
+
+    materials_menu_->addSeparator();
+    const auto& presets = cadino::ui::MaterialLibrary::instance().presets();
+    if (presets.empty()) {
+        auto* empty = materials_menu_->addAction("(no presets yet)");
+        empty->setEnabled(false);
+        return;
+    }
+    auto* apply_menu = materials_menu_->addMenu("Apply to Selection");
+    for (const auto& p : presets) {
+        const std::string name = p.name;
+        auto* a = apply_menu->addAction(QString::fromStdString(name));
+        connect(a, &QAction::triggered, this, [this, name] { apply_material(name); });
+    }
+    auto* delete_menu = materials_menu_->addMenu("Delete Preset");
+    for (const auto& p : presets) {
+        const std::string name = p.name;
+        auto* a = delete_menu->addAction(QString::fromStdString(name));
+        connect(a, &QAction::triggered, this, [this, name] {
+            cadino::ui::MaterialLibrary::instance().remove(name);
+            rebuild_materials_menu();
+            statusBar()->showMessage(
+                QString("Deleted preset \"%1\"").arg(QString::fromStdString(name)));
+        });
+    }
+}
+
+void MainWindow::save_selection_material() {
+    if (plan_view_->selections().empty()) {
+        statusBar()->showMessage("Material — select an entity first");
+        return;
+    }
+    bool ok = false;
+    const QString name = QInputDialog::getText(
+        this, "Save material preset", "Preset name:",
+        QLineEdit::Normal, "Material", &ok);
+    if (!ok || name.isEmpty()) return;
+    if (cadino::ui::MaterialLibrary::instance().capture_from_selection(
+            document_, plan_view_->selections(), name.toStdString())) {
+        rebuild_materials_menu();
+        statusBar()->showMessage(QString("Saved preset \"%1\"").arg(name));
+    } else {
+        statusBar()->showMessage("Selection has no material-bearing entity");
+    }
+}
+
+void MainWindow::apply_material(const std::string& name) {
+    const int n = cadino::ui::MaterialLibrary::instance().apply_to_selection(
+        document_, stack_, plan_view_->selections(), name);
+    plan_view_->notify_document_modified();
+    statusBar()->showMessage(
+        QString("Applied preset \"%1\" to %2 entities")
+            .arg(QString::fromStdString(name)).arg(n));
+}
 
 void MainWindow::show_sun_dialog() {
     QDialog dlg(this);
