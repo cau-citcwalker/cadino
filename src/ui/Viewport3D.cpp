@@ -833,7 +833,14 @@ void Viewport3D::paintGL() {
                 if (it == texture_cache_.end()) {
                     QImage img(g.texture_path);
                     if (!img.isNull()) {
+                        // QImage::flipped() was added in Qt 6.9; fall back to
+                        // the deprecated mirrored() on older Qt versions so
+                        // CI on 6.7.x still builds.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
                         auto t = std::make_unique<QOpenGLTexture>(img.flipped(Qt::Vertical));
+#else
+                        auto t = std::make_unique<QOpenGLTexture>(img.mirrored(false, true));
+#endif
                         t->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
                         t->setMagnificationFilter(QOpenGLTexture::Linear);
                         t->setWrapMode(QOpenGLTexture::Repeat);
