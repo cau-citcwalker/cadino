@@ -17,7 +17,9 @@ struct Box {
     Eigen::Vector2d size_xy{600.0, 600.0};
     double height{750.0};
     double base_z{0.0};
-    double rotation_z{0.0};  // radians, around vertical axis at position
+    double rotation_x{0.0};  // radians around world X axis
+    double rotation_y{0.0};  // radians around world Y axis
+    double rotation_z{0.0};  // radians around world Z axis
     Color color{0.78f, 0.62f, 0.40f};
     float roughness{0.6f};
     float metallic{0.0f};

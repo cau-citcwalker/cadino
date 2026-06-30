@@ -113,6 +113,7 @@ private:
     [[nodiscard]] double rotation_angle_for(GizmoAxis axis, QPointF screen_pos,
                                             bool* ok = nullptr) const;
     void render_gizmo();
+    void render_gnomon();
     void capture_drag_originals();
     void apply_drag_delta(const QVector3D& delta);
     void apply_drag_rotation(GizmoAxis axis, double angle);
@@ -159,6 +160,8 @@ private:
 
     Qt::MouseButton drag_button_{Qt::NoButton};
     QPointF drag_last_;
+    QPointF press_pos_{};
+    bool pending_clear_on_release_{false};
 
     bool entity_dragging_{false};
     QVector3D drag_ground_start_{};

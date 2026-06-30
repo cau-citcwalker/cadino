@@ -23,7 +23,7 @@ struct Dimension {
     Eigen::Vector2d end{0.0, 0.0};
     double offset{300.0};           // perpendicular distance from segment (mm)
     std::string text_override{};    // empty → measured length is drawn
-    Color color{1.0f, 1.0f, 1.0f};
+    Color color{0.10f, 0.10f, 0.12f};
     double text_height{120.0};      // mm
     double arrow_size{60.0};        // mm
 

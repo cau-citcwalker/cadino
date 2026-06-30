@@ -800,77 +800,73 @@ void MainWindow::polar_array_dialog() {
 
 void MainWindow::set_view_mode(ViewMode mode) {
     view_mode_ = mode;
-    plan_view_->setVisible(false);
-    viewport_3d_->setVisible(false);
-    front_view_->setVisible(false);
-    side_view_->setVisible(false);
 
+    // Decide intent first, then apply visibility top-down. Reading
+    // `child->isVisible()` after setVisible(true) lies when the parent row
+    // is still hidden — it returned false and the row never re-appeared,
+    // so any switch out of PlanOnly hid every panel.
+    bool want_plan = false, want_3d = false, want_front = false, want_side = false;
     switch (mode) {
-        case ViewMode::PlanOnly:
-            plan_view_->setVisible(true);
-            if (mode_plan_action_) mode_plan_action_->setChecked(true);
-            statusBar()->showMessage("View: Plan (Top) only");
-            break;
-        case ViewMode::FrontOnly:
-            front_view_->setVisible(true);
-            if (mode_front_action_) mode_front_action_->setChecked(true);
-            statusBar()->showMessage("View: Front elevation only");
-            break;
-        case ViewMode::SideOnly:
-            side_view_->setVisible(true);
-            if (mode_side_action_) mode_side_action_->setChecked(true);
-            statusBar()->showMessage("View: Side elevation only");
-            break;
-        case ViewMode::IsoOnly:
-            viewport_3d_->setVisible(true);
-            if (mode_iso_action_) mode_iso_action_->setChecked(true);
-            statusBar()->showMessage("View: 3D only");
-            break;
-        case ViewMode::Split:
-            plan_view_->setVisible(true);
-            viewport_3d_->setVisible(true);
-            if (mode_split_action_) mode_split_action_->setChecked(true);
-            statusBar()->showMessage("View: Split (Plan + 3D)");
-            break;
-        case ViewMode::Quad:
-            plan_view_->setVisible(true);
-            viewport_3d_->setVisible(true);
-            front_view_->setVisible(true);
-            side_view_->setVisible(true);
-            if (mode_quad_action_) mode_quad_action_->setChecked(true);
-            statusBar()->showMessage("View: Quad — Plan / 3D / Front / Side");
-            break;
+        case ViewMode::PlanOnly:  want_plan = true; break;
+        case ViewMode::FrontOnly: want_front = true; break;
+        case ViewMode::SideOnly:  want_side = true; break;
+        case ViewMode::IsoOnly:   want_3d = true; break;
+        case ViewMode::Split:     want_plan = true; want_3d = true; break;
+        case ViewMode::Quad:      want_plan = want_3d = want_front = want_side = true; break;
     }
 
-    top_row_->setVisible(plan_view_->isVisible() || viewport_3d_->isVisible());
-    bottom_row_->setVisible(front_view_->isVisible() || side_view_->isVisible());
+    // Show / hide the row containers first so their children's setVisible
+    // calls actually take effect on the next layout.
+    top_row_->setVisible(want_plan || want_3d);
+    bottom_row_->setVisible(want_front || want_side);
+    plan_view_->setVisible(want_plan);
+    viewport_3d_->setVisible(want_3d);
+    front_view_->setVisible(want_front);
+    side_view_->setVisible(want_side);
 
-    // Read sizes from the splitter (the only widget whose extent doesn't
-    // collapse to 0 when its sub-rows hide). Reading top_row_->width() etc.
-    // is unsafe across consecutive mode switches because the previous
-    // setSizes call's layout pass may still be pending.
-    const int splitter_h = std::max(splitter_->height(), 600);
-    const int row_w = std::max(splitter_->width(), 800);
-    if (mode == ViewMode::Quad) {
-        splitter_->setSizes({splitter_h / 2, splitter_h / 2});
-        top_row_->setSizes({row_w / 2, row_w / 2});
-        bottom_row_->setSizes({row_w / 2, row_w / 2});
-    } else if (mode == ViewMode::Split) {
-        splitter_->setSizes({splitter_h, 0});
-        top_row_->setSizes({row_w / 2, row_w / 2});
-    } else if (mode == ViewMode::PlanOnly) {
-        splitter_->setSizes({splitter_h, 0});
-        top_row_->setSizes({row_w, 0});
-    } else if (mode == ViewMode::IsoOnly) {
-        splitter_->setSizes({splitter_h, 0});
-        top_row_->setSizes({0, row_w});
-    } else if (mode == ViewMode::FrontOnly) {
-        splitter_->setSizes({0, splitter_h});
-        bottom_row_->setSizes({row_w, 0});
-    } else if (mode == ViewMode::SideOnly) {
-        splitter_->setSizes({0, splitter_h});
-        bottom_row_->setSizes({0, row_w});
+    if (mode_plan_action_)  mode_plan_action_->setChecked(mode == ViewMode::PlanOnly);
+    if (mode_front_action_) mode_front_action_->setChecked(mode == ViewMode::FrontOnly);
+    if (mode_side_action_)  mode_side_action_->setChecked(mode == ViewMode::SideOnly);
+    if (mode_iso_action_)   mode_iso_action_->setChecked(mode == ViewMode::IsoOnly);
+    if (mode_split_action_) mode_split_action_->setChecked(mode == ViewMode::Split);
+    if (mode_quad_action_)  mode_quad_action_->setChecked(mode == ViewMode::Quad);
+    switch (mode) {
+        case ViewMode::PlanOnly:  statusBar()->showMessage("View: Plan (Top) only"); break;
+        case ViewMode::FrontOnly: statusBar()->showMessage("View: Front elevation only"); break;
+        case ViewMode::SideOnly:  statusBar()->showMessage("View: Side elevation only"); break;
+        case ViewMode::IsoOnly:   statusBar()->showMessage("View: 3D only"); break;
+        case ViewMode::Split:     statusBar()->showMessage("View: Split (Plan + 3D)"); break;
+        case ViewMode::Quad:      statusBar()->showMessage("View: Quad — Plan / 3D / Front / Side"); break;
     }
+
+    // Defer setSizes until after the visibility flips have settled. Calling
+    // setSizes while a child's show/hide is still queued has crashed Qt in
+    // this codebase before (see project_qsplitter_pitfall).
+    QTimer::singleShot(0, this, [this, mode] {
+        if (!splitter_ || !top_row_ || !bottom_row_) return;
+        const int splitter_h = std::max(splitter_->height(), 600);
+        const int row_w = std::max(splitter_->width(), 800);
+        if (mode == ViewMode::Quad) {
+            splitter_->setSizes({splitter_h / 2, splitter_h / 2});
+            top_row_->setSizes({row_w / 2, row_w / 2});
+            bottom_row_->setSizes({row_w / 2, row_w / 2});
+        } else if (mode == ViewMode::Split) {
+            splitter_->setSizes({splitter_h, 0});
+            top_row_->setSizes({row_w / 2, row_w / 2});
+        } else if (mode == ViewMode::PlanOnly) {
+            splitter_->setSizes({splitter_h, 0});
+            top_row_->setSizes({row_w, 0});
+        } else if (mode == ViewMode::IsoOnly) {
+            splitter_->setSizes({splitter_h, 0});
+            top_row_->setSizes({0, row_w});
+        } else if (mode == ViewMode::FrontOnly) {
+            splitter_->setSizes({0, splitter_h});
+            bottom_row_->setSizes({row_w, 0});
+        } else if (mode == ViewMode::SideOnly) {
+            splitter_->setSizes({0, splitter_h});
+            bottom_row_->setSizes({0, row_w});
+        }
+    });
 }
 
 void MainWindow::update_undo_redo_actions() {

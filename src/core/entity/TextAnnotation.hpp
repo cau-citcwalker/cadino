@@ -20,7 +20,7 @@ struct TextAnnotation {
     std::string text{"Text"};
     double height{120.0};
     double rotation_z{0.0};
-    Color color{1.0f, 1.0f, 1.0f};
+    Color color{0.10f, 0.10f, 0.12f};
 };
 
 }  // namespace cadino::core

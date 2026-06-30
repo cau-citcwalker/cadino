@@ -17,6 +17,8 @@ struct Cylinder {
     double radius{300.0};
     double height{750.0};
     double base_z{0.0};
+    double rotation_x{0.0};  // radians around world X axis
+    double rotation_y{0.0};  // radians around world Y axis
     Color color{0.55f, 0.70f, 0.82f};
     float roughness{0.5f};
     float metallic{0.0f};

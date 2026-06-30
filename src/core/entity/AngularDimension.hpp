@@ -23,7 +23,7 @@ struct AngularDimension {
     double text_height{120.0};
     double arrow_size{60.0};
     std::string text_override{};
-    Color color{1.0f, 1.0f, 1.0f};
+    Color color{0.10f, 0.10f, 0.12f};
 
     [[nodiscard]] double angle_rad() const noexcept;
 };

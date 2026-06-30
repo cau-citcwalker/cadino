@@ -8,8 +8,10 @@
 #include <vector>
 
 #include <QApplication>
+#include <QFont>
 #include <QImage>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QWheelEvent>
 
 #include <spdlog/spdlog.h>
@@ -156,8 +158,14 @@ void main() {
         frag_color = vec4(v_color, 1.0);
         return;
     }
+    // Use the face's world-space outward normal as-is. Earlier we flipped
+    // N for back-facing fragments (two-sided lighting), but combined with
+    // tilt rotations that put some faces' winding on the "wrong" side from
+    // the camera, that flip made adjacent surfaces of the same solid shade
+    // inconsistently — half looked "outside" and half looked "inside".
+    // With backface culling enabled in paintGL only the genuinely outward
+    // sides render, so no flip is needed.
     vec3 N = normalize(v_normal);
-    if (!gl_FrontFacing) N = -N;
 
     float roughness = clamp(v_material.x, 0.04, 1.0);
     float metallic = clamp(v_material.y, 0.0, 1.0);
@@ -168,9 +176,12 @@ void main() {
     vec3 fill_dir = normalize(vec3(0.5, 0.7, 0.6));
     vec3 sky_dir = vec3(0.0, 0.0, 1.0);
 
-    vec3 key_color = vec3(1.00, 0.96, 0.88) * 2.4;
-    vec3 fill_color = vec3(0.55, 0.65, 0.75) * 0.6;
-    vec3 sky_color = vec3(0.45, 0.55, 0.70) * 0.4;
+    // Heavy directional + minimal fill so faces shade decisively by their
+    // normal instead of looking like one uniform colour. Without this the
+    // wall reads as a flat grey slab even after tilt.
+    vec3 key_color = vec3(1.00, 0.96, 0.88) * 4.5;
+    vec3 fill_color = vec3(0.55, 0.65, 0.75) * 0.18;
+    vec3 sky_color = vec3(0.45, 0.55, 0.70) * 0.18;
 
     vec3 albedo = apply_pattern(v_color, v_pattern, v_uv);
     if (u_has_texture == 1) {
@@ -188,10 +199,10 @@ void main() {
     // darkens downward-facing fragments and surfaces close to the ground
     // plane (mimics corner/contact occlusion in interior scenes).
     float up = N.z * 0.5 + 0.5;
-    vec3 ambient_color = mix(vec3(0.12, 0.10, 0.09), vec3(0.30, 0.34, 0.40), up);
-    float face_ao = mix(0.55, 1.0, up);
+    vec3 ambient_color = mix(vec3(0.04, 0.04, 0.05), vec3(0.14, 0.16, 0.20), up);
+    float face_ao = mix(0.45, 1.0, up);
     float ground_proximity = clamp(v_world.z / 400.0, 0.0, 1.0);
-    float floor_contact_ao = mix(0.75, 1.0, ground_proximity);
+    float floor_contact_ao = mix(0.70, 1.0, ground_proximity);
     float ao = face_ao * floor_contact_ao;
     vec3 ambient = albedo * ambient_color * (1.0 - metallic * 0.6) * ao;
 
@@ -236,10 +247,37 @@ void push_quad(std::vector<Vertex>& verts, QVector3D a, QVector3D b, QVector3D c
                  c.x(), c.y(), d.x(), d.y(), pattern);
 }
 
+// Tait-Bryan ZYX intrinsic: rotate around Z, then Y, then X.
+QVector3D apply_xyz_rotation(QVector3D p, float rx, float ry, float rz) {
+    const float cz = std::cos(rz), sz = std::sin(rz);
+    const float cy = std::cos(ry), sy = std::sin(ry);
+    const float cx = std::cos(rx), sx = std::sin(rx);
+    const float x1 = p.x() * cz - p.y() * sz;
+    const float y1 = p.x() * sz + p.y() * cz;
+    const float z1 = p.z();
+    const float x2 = x1 * cy + z1 * sy;
+    const float y2 = y1;
+    const float z2 = -x1 * sy + z1 * cy;
+    const float x3 = x2;
+    const float y3 = y2 * cx - z2 * sx;
+    const float z3 = y2 * sx + z2 * cx;
+    return {x3, y3, z3};
+}
+
 void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
                    float zmin, float zmax, QVector3D color, float rough, float metal,
-                   float pattern = 0.0f, int segments = 32) {
+                   float pattern = 0.0f, int segments = 32,
+                   float rx = 0.0f, float ry = 0.0f) {
     const float pi = std::numbers::pi_v<float>;
+    const float zmid = (zmin + zmax) * 0.5f;
+    const float hz = (zmax - zmin) * 0.5f;
+    const QVector3D pivot(center.x(), center.y(), zmid);
+    auto place = [&](float lx, float ly, float lz) {
+        return pivot + apply_xyz_rotation(QVector3D(lx, ly, lz), rx, ry, 0.0f);
+    };
+    auto place_n = [&](float nx, float ny, float nz) {
+        return apply_xyz_rotation(QVector3D(nx, ny, nz), rx, ry, 0.0f);
+    };
     const auto cv = [&](QVector3D p, QVector3D n, float u, float v) {
         verts.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(),
                          color.x(), color.y(), color.z(), rough, metal,
@@ -253,12 +291,12 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
         const float c0 = std::cos(a0), s0 = std::sin(a0);
         const float c1 = std::cos(a1), s1 = std::sin(a1);
 
-        const QVector3D b0(center.x() + radius * c0, center.y() + radius * s0, zmin);
-        const QVector3D b1(center.x() + radius * c1, center.y() + radius * s1, zmin);
-        const QVector3D t0(center.x() + radius * c0, center.y() + radius * s0, zmax);
-        const QVector3D t1(center.x() + radius * c1, center.y() + radius * s1, zmax);
-        const QVector3D n0(c0, s0, 0.0f);
-        const QVector3D n1(c1, s1, 0.0f);
+        const QVector3D b0 = place(radius * c0, radius * s0, -hz);
+        const QVector3D b1 = place(radius * c1, radius * s1, -hz);
+        const QVector3D t0 = place(radius * c0, radius * s0,  hz);
+        const QVector3D t1 = place(radius * c1, radius * s1,  hz);
+        const QVector3D n0 = place_n(c0, s0, 0.0f);
+        const QVector3D n1 = place_n(c1, s1, 0.0f);
         const float u0 = a0 / (2.0f * pi) * circumference;
         const float u1 = a1 / (2.0f * pi) * circumference;
         cv(b0, n0, u0, zmin);
@@ -269,23 +307,23 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
         cv(t0, n0, u0, zmax);
     }
 
-    const QVector3D top_c(center.x(), center.y(), zmax);
-    const QVector3D bot_c(center.x(), center.y(), zmin);
-    const QVector3D zp(0.0f, 0.0f, 1.0f);
-    const QVector3D zn(0.0f, 0.0f, -1.0f);
+    const QVector3D top_c = place(0.0f, 0.0f,  hz);
+    const QVector3D bot_c = place(0.0f, 0.0f, -hz);
+    const QVector3D zp = place_n(0.0f, 0.0f,  1.0f);
+    const QVector3D zn = place_n(0.0f, 0.0f, -1.0f);
     for (int i = 0; i < segments; ++i) {
         const float a0 = 2.0f * pi * i / segments;
         const float a1 = 2.0f * pi * (i + 1) / segments;
         const float c0 = std::cos(a0), s0 = std::sin(a0);
         const float c1 = std::cos(a1), s1 = std::sin(a1);
-        const QVector3D pt0(center.x() + radius * c0, center.y() + radius * s0, zmax);
-        const QVector3D pt1(center.x() + radius * c1, center.y() + radius * s1, zmax);
+        const QVector3D pt0 = place(radius * c0, radius * s0, hz);
+        const QVector3D pt1 = place(radius * c1, radius * s1, hz);
         cv(top_c, zp, center.x(), center.y());
         cv(pt0,   zp, pt0.x(),    pt0.y());
         cv(pt1,   zp, pt1.x(),    pt1.y());
 
-        const QVector3D pb0(center.x() + radius * c0, center.y() + radius * s0, zmin);
-        const QVector3D pb1(center.x() + radius * c1, center.y() + radius * s1, zmin);
+        const QVector3D pb0 = place(radius * c0, radius * s0, -hz);
+        const QVector3D pb1 = place(radius * c1, radius * s1, -hz);
         cv(bot_c, zn, center.x(), center.y());
         cv(pb1,   zn, pb1.x(),    pb1.y());
         cv(pb0,   zn, pb0.x(),    pb0.y());
@@ -294,63 +332,81 @@ void push_cylinder(std::vector<Vertex>& verts, QVector3D center, float radius,
 
 void push_oriented_box(std::vector<Vertex>& verts, QVector3D center, float hx, float hy,
                        float zmin, float zmax, float yaw, QVector3D color,
-                       float rough, float metal, float pattern = 0.0f) {
-    const float c = std::cos(yaw);
-    const float s = std::sin(yaw);
-    const QVector3D xp(c, s, 0.0f);
-    const QVector3D yp(-s, c, 0.0f);
-    const QVector3D zp(0.0f, 0.0f, 1.0f);
+                       float rough, float metal, float pattern = 0.0f,
+                       float pitch = 0.0f, float roll = 0.0f,
+                       bool pivot_at_base = false) {
+    // (yaw, pitch, roll) = (rotation_z, rotation_y, rotation_x). When
+    // pivot_at_base is true, rotation happens around (cx, cy, zmin) instead
+    // of the geometric centre — used for walls so they stay anchored on
+    // the floor when tilted.
+    const float zmid = (zmin + zmax) * 0.5f;
+    const float hz = (zmax - zmin) * 0.5f;
+    const float pivot_z = pivot_at_base ? zmin : zmid;
+    const float lz_lo = pivot_at_base ? 0.0f : -hz;
+    const float lz_hi = pivot_at_base ? (zmax - zmin) : hz;
+    const QVector3D pivot(center.x(), center.y(), pivot_z);
 
-    const QVector3D b0 = center + (-hx) * xp + (-hy) * yp + QVector3D(0, 0, zmin);
-    const QVector3D b1 = center + ( hx) * xp + (-hy) * yp + QVector3D(0, 0, zmin);
-    const QVector3D b2 = center + ( hx) * xp + ( hy) * yp + QVector3D(0, 0, zmin);
-    const QVector3D b3 = center + (-hx) * xp + ( hy) * yp + QVector3D(0, 0, zmin);
-    const QVector3D t0(b0.x(), b0.y(), zmax);
-    const QVector3D t1(b1.x(), b1.y(), zmax);
-    const QVector3D t2(b2.x(), b2.y(), zmax);
-    const QVector3D t3(b3.x(), b3.y(), zmax);
+    auto place = [&](float lx, float ly, float lz) {
+        return pivot + apply_xyz_rotation(QVector3D(lx, ly, lz), roll, pitch, yaw);
+    };
 
-    // Per-face planar UV: top/bottom use the box's local XY (in mm), the four
-    // sides use (along-face arc length, height).
-    const float sx = hx * 2.0f, sy = hy * 2.0f, sz = zmax - zmin;
-    push_quad_uv(verts, t0, t1, t2, t3, zp, color, rough, metal,
+    const QVector3D b0 = place(-hx, -hy, lz_lo);
+    const QVector3D b1 = place( hx, -hy, lz_lo);
+    const QVector3D b2 = place( hx,  hy, lz_lo);
+    const QVector3D b3 = place(-hx,  hy, lz_lo);
+    const QVector3D t0 = place(-hx, -hy, lz_hi);
+    const QVector3D t1 = place( hx, -hy, lz_hi);
+    const QVector3D t2 = place( hx,  hy, lz_hi);
+    const QVector3D t3 = place(-hx,  hy, lz_hi);
+
+    // Recompute per-face normals after rotation so lighting stays correct.
+    auto face_normal = [](QVector3D a, QVector3D b, QVector3D c) {
+        return QVector3D::crossProduct(b - a, c - a).normalized();
+    };
+    const QVector3D nz_up = face_normal(t0, t1, t2);
+    const QVector3D nz_dn = face_normal(b3, b2, b1);
+    const QVector3D nx_p  = face_normal(b1, b2, t2);
+    const QVector3D nx_n  = face_normal(b3, b0, t0);
+    const QVector3D ny_p  = face_normal(b2, b3, t3);
+    const QVector3D ny_n  = face_normal(b0, b1, t1);
+
+    const float sx = hx * 2.0f, sy = hy * 2.0f;
+    push_quad_uv(verts, t0, t1, t2, t3, nz_up, color, rough, metal,
                  -hx, -hy,  hx, -hy,  hx,  hy, -hx,  hy, pattern);
-    push_quad_uv(verts, b3, b2, b1, b0, -zp, color, rough, metal,
+    push_quad_uv(verts, b3, b2, b1, b0, nz_dn, color, rough, metal,
                  -hx,  hy,  hx,  hy,  hx, -hy, -hx, -hy, pattern);
-    push_quad_uv(verts, b1, b2, t2, t1, xp, color, rough, metal,
+    push_quad_uv(verts, b1, b2, t2, t1, nx_p, color, rough, metal,
                  0, zmin, sy, zmin, sy, zmax, 0, zmax, pattern);
-    push_quad_uv(verts, b3, b0, t0, t3, -xp, color, rough, metal,
+    push_quad_uv(verts, b3, b0, t0, t3, nx_n, color, rough, metal,
                  0, zmin, sy, zmin, sy, zmax, 0, zmax, pattern);
-    push_quad_uv(verts, b2, b3, t3, t2, yp, color, rough, metal,
+    push_quad_uv(verts, b2, b3, t3, t2, ny_p, color, rough, metal,
                  0, zmin, sx, zmin, sx, zmax, 0, zmax, pattern);
-    push_quad_uv(verts, b0, b1, t1, t0, -yp, color, rough, metal,
+    push_quad_uv(verts, b0, b1, t1, t0, ny_n, color, rough, metal,
                  0, zmin, sx, zmin, sx, zmax, 0, zmax, pattern);
-    (void)sz;
 }
 
-void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
+// One opening (door / window) carved out of a wall.
+struct WallCutout {
+    float a0;    // along-wall start
+    float a1;    // along-wall end
+    float z0;    // bottom of the opening
+    float z1;    // top of the opening
+};
+
+void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w,
+                   std::vector<WallCutout> cutouts = {}) {
     const QVector3D start(static_cast<float>(w.start.x()),
                           static_cast<float>(w.start.y()), 0.0f);
     const QVector3D end(static_cast<float>(w.end.x()),
                         static_cast<float>(w.end.y()), 0.0f);
     const QVector3D dir = end - start;
     const float len = dir.length();
-    if (len < 1e-5f) return;
+    if (!(len > 1e-5f)) return;
 
     const QVector3D unit = dir / len;
     const QVector3D normal(-unit.y(), unit.x(), 0.0f);
     const QVector3D up(0.0f, 0.0f, 1.0f);
     const QVector3D off = normal * static_cast<float>(w.thickness * 0.5);
-    const QVector3D h = up * static_cast<float>(w.height);
-
-    const QVector3D b0 = start + off;
-    const QVector3D b1 = end + off;
-    const QVector3D b2 = end - off;
-    const QVector3D b3 = start - off;
-    const QVector3D t0 = b0 + h;
-    const QVector3D t1 = b1 + h;
-    const QVector3D t2 = b2 + h;
-    const QVector3D t3 = b3 + h;
 
     const QVector3D color(w.color.r, w.color.g, w.color.b);
     const float r = w.roughness;
@@ -358,18 +414,58 @@ void push_wall_box(std::vector<Vertex>& verts, const cadino::core::Wall& w) {
     const float pat = static_cast<float>(w.pattern);
     const float thk = static_cast<float>(w.thickness);
     const float h_mm = static_cast<float>(w.height);
-    push_quad_uv(verts, t0, t1, t2, t3, up, color, r, m,
-                 0, 0, len, 0, len, thk, 0, thk, pat);
-    push_quad_uv(verts, b3, b2, b1, b0, -up, color, r, m,
-                 0, thk, len, thk, len, 0, 0, 0, pat);
-    push_quad_uv(verts, b0, b1, t1, t0, normal, color, r, m,
-                 0, 0, len, 0, len, h_mm, 0, h_mm, pat);
-    push_quad_uv(verts, b2, b3, t3, t2, -normal, color, r, m,
-                 0, 0, len, 0, len, h_mm, 0, h_mm, pat);
-    push_quad_uv(verts, b1, b2, t2, t1, unit, color, r, m,
-                 0, 0, thk, 0, thk, h_mm, 0, h_mm, pat);
-    push_quad_uv(verts, b3, b0, t0, t3, -unit, color, r, m,
-                 0, 0, thk, 0, thk, h_mm, 0, h_mm, pat);
+
+    // Emits one rectangular wall segment between along=a0..a1 and z=z0..z1
+    // by delegating to push_oriented_box. That function already gets the
+    // outward-facing normals right via face_normal on a consistent CCW
+    // winding — duplicating that math here had repeatedly broken whichever
+    // face I missed (top, -normal side, etc.), making the wall look
+    // inside-out.
+    const float yaw = std::atan2(unit.y(), unit.x());
+    const float rx = static_cast<float>(w.rotation_x);
+    const float ry = static_cast<float>(w.rotation_y);
+    auto emit_segment = [&](float a0, float a1, float z0, float z1) {
+        if (!(a1 - a0 > 1e-3f) || !(z1 - z0 > 1e-3f)) return;
+        const float mid_a = 0.5f * (a0 + a1);
+        const QVector3D center = start + unit * mid_a;
+        push_oriented_box(verts, center,
+                          0.5f * (a1 - a0),     // hx along wall direction
+                          0.5f * thk,           // hy across wall thickness
+                          z0, z1, yaw,
+                          color, r, m, pat,
+                          ry, rx,
+                          true);                // rotate around base, not centre
+    };
+
+    // When the wall is tilted out of the floor plane, opening cutouts no
+    // longer line up with vertical door / window planes, so render the
+    // whole wall as a single tilted slab and skip the cutouts.
+    const bool tilted = std::abs(rx) > 1e-4f || std::abs(ry) > 1e-4f;
+    if (cutouts.empty() || tilted) {
+        emit_segment(0.0f, len, 0.0f, h_mm);
+        return;
+    }
+
+    // Sort and clamp cutouts to wall extents, then emit wall pieces around them.
+    std::sort(cutouts.begin(), cutouts.end(),
+              [](const WallCutout& a, const WallCutout& b) { return a.a0 < b.a0; });
+    float cur = 0.0f;
+    for (const auto& cut : cutouts) {
+        const float ca0 = std::clamp(cut.a0, 0.0f, len);
+        const float ca1 = std::clamp(cut.a1, 0.0f, len);
+        const float cz0 = std::clamp(cut.z0, 0.0f, h_mm);
+        const float cz1 = std::clamp(cut.z1, 0.0f, h_mm);
+        if (!(ca1 > ca0)) continue;
+
+        // Full-height pier from previous cut end to this cut's start.
+        if (ca0 > cur) emit_segment(cur, ca0, 0.0f, h_mm);
+        // Sill below the opening (e.g. window parapet).
+        if (cz0 > 0.0f) emit_segment(ca0, ca1, 0.0f, cz0);
+        // Lintel above the opening.
+        if (cz1 < h_mm) emit_segment(ca0, ca1, cz1, h_mm);
+        cur = std::max(cur, ca1);
+    }
+    if (cur < len) emit_segment(cur, len, 0.0f, h_mm);
 }
 
 void push_ground_grid(std::vector<Vertex>& verts, float size) {
@@ -454,7 +550,26 @@ void Viewport3D::rebuild_mesh() {
     for (const auto& [id, w] : document_.walls()) {
         if (!layer_visible(w.layer_id)) continue;
         auto& b = buckets[QString::fromStdString(w.texture_path)];
-        push_wall_box(b, w);
+        // Collect door / window openings hosted by this wall and feed them
+        // as cutouts so the wall mesh is split around the holes.
+        std::vector<WallCutout> cutouts;
+        for (const auto& [_, d] : document_.doors()) {
+            if (d.host_wall != id) continue;
+            const float half = static_cast<float>(d.width * 0.5);
+            cutouts.push_back({static_cast<float>(d.position_along) - half,
+                               static_cast<float>(d.position_along) + half,
+                               static_cast<float>(d.sill_height),
+                               static_cast<float>(d.sill_height + d.height)});
+        }
+        for (const auto& [_, win] : document_.windows()) {
+            if (win.host_wall != id) continue;
+            const float half = static_cast<float>(win.width * 0.5);
+            cutouts.push_back({static_cast<float>(win.position_along) - half,
+                               static_cast<float>(win.position_along) + half,
+                               static_cast<float>(win.sill_height),
+                               static_cast<float>(win.sill_height + win.height)});
+        }
+        push_wall_box(b, w, std::move(cutouts));
     }
     const std::size_t walls_end = untex.size();
     for (const auto& [id, b] : document_.boxes()) {
@@ -469,7 +584,9 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(b.base_z + b.height),
                           static_cast<float>(b.rotation_z),
                           QVector3D(b.color.r, b.color.g, b.color.b),
-                          b.roughness, b.metallic, static_cast<float>(b.pattern));
+                          b.roughness, b.metallic, static_cast<float>(b.pattern),
+                          static_cast<float>(b.rotation_y),
+                          static_cast<float>(b.rotation_x));
     }
     for (const auto& [id, c] : document_.cylinders()) {
         if (!layer_visible(c.layer_id)) continue;
@@ -480,7 +597,10 @@ void Viewport3D::rebuild_mesh() {
                       static_cast<float>(c.base_z),
                       static_cast<float>(c.base_z + c.height),
                       QVector3D(c.color.r, c.color.g, c.color.b),
-                      c.roughness, c.metallic, static_cast<float>(c.pattern));
+                      c.roughness, c.metallic, static_cast<float>(c.pattern),
+                      32,
+                      static_cast<float>(c.rotation_x),
+                      static_cast<float>(c.rotation_y));
     }
     for (const auto& [id, block] : document_.blocks()) {
         if (!layer_visible(block.layer_id)) continue;
@@ -544,17 +664,42 @@ void Viewport3D::rebuild_mesh() {
         if (!layer_visible(surf.layer_id)) continue;
         auto& bucket = untex;
         const auto tess = surf.tessellate(24, 24);
+        // Skip if tessellation came back empty or with mismatched normal/
+        // position arrays — a degenerate surface would otherwise blow past
+        // the bounds check on the inner loop and crash.
+        if (tess.indices.empty() || tess.positions.empty() ||
+            tess.normals.size() != tess.positions.size()) continue;
         const QVector3D color(surf.color.r, surf.color.g, surf.color.b);
         const float rough = surf.roughness;
         const float metal = surf.metallic;
         const float pat = static_cast<float>(surf.pattern);
+        const std::size_t max_idx = tess.positions.size();
         for (std::size_t i = 0; i + 2 < tess.indices.size(); i += 3) {
-            const auto& p0 = tess.positions[tess.indices[i]];
-            const auto& p1 = tess.positions[tess.indices[i + 1]];
-            const auto& p2 = tess.positions[tess.indices[i + 2]];
-            const auto& n0 = tess.normals[tess.indices[i]];
-            const auto& n1 = tess.normals[tess.indices[i + 1]];
-            const auto& n2 = tess.normals[tess.indices[i + 2]];
+            const auto i0 = tess.indices[i];
+            const auto i1 = tess.indices[i + 1];
+            const auto i2 = tess.indices[i + 2];
+            if (i0 >= max_idx || i1 >= max_idx || i2 >= max_idx) continue;
+            const auto& p0 = tess.positions[i0];
+            const auto& p1 = tess.positions[i1];
+            const auto& p2 = tess.positions[i2];
+            auto n0 = tess.normals[i0];
+            auto n1 = tess.normals[i1];
+            auto n2 = tess.normals[i2];
+            // Fall back to a flat face normal if the accumulated vertex
+            // normal collapsed to zero (degenerate adjacent triangles).
+            auto safe = [&](Eigen::Vector3f n) {
+                if (n.norm() < 1e-6f) {
+                    const Eigen::Vector3f e1 = p1 - p0;
+                    const Eigen::Vector3f e2 = p2 - p0;
+                    n = Eigen::Vector3f(e1.y() * e2.z() - e1.z() * e2.y(),
+                                        e1.z() * e2.x() - e1.x() * e2.z(),
+                                        e1.x() * e2.y() - e1.y() * e2.x());
+                    if (n.norm() < 1e-6f) n = Eigen::Vector3f::UnitZ();
+                }
+                n.normalize();
+                return n;
+            };
+            n0 = safe(n0); n1 = safe(n1); n2 = safe(n2);
             bucket.push_back({p0.x(), p0.y(), p0.z(), n0.x(), n0.y(), n0.z(),
                               color.x(), color.y(), color.z(), rough, metal,
                               p0.x(), p0.y(), pat});
@@ -617,13 +762,19 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(w->end.y()), 0.0f);
         const QVector3D dir = b - a;
         const float len = dir.length();
-        if (len < 1e-5f) continue;
+        if (!(len > 1e-5f)) continue;
         const QVector3D unit = dir / len;
         const float yaw = std::atan2(unit.y(), unit.x());
-        const QVector3D center = a + unit * static_cast<float>(d.position_along);
+        // Render the door panel as a thin (~40 mm) slab tucked into the
+        // cutout, slightly offset along the wall normal so it reads as a
+        // real door — not a full-thickness brown block plugging the wall.
+        const QVector3D normal(-unit.y(), unit.x(), 0.0f);
+        constexpr float kDoorSlab = 40.0f;
+        const QVector3D center = a + unit * static_cast<float>(d.position_along)
+                               + normal * (static_cast<float>(w->thickness) * 0.5f - kDoorSlab * 0.5f);
         push_oriented_box(untex, center,
                           static_cast<float>(d.width * 0.5),
-                          static_cast<float>(w->thickness * 0.5),
+                          kDoorSlab * 0.5f,
                           static_cast<float>(d.sill_height),
                           static_cast<float>(d.sill_height + d.height),
                           yaw,
@@ -638,13 +789,15 @@ void Viewport3D::rebuild_mesh() {
                           static_cast<float>(w->end.y()), 0.0f);
         const QVector3D dir = b - a;
         const float len = dir.length();
-        if (len < 1e-5f) continue;
+        if (!(len > 1e-5f)) continue;
         const QVector3D unit = dir / len;
         const float yaw = std::atan2(unit.y(), unit.x());
+        // Glass pane: very thin slab in the centre of the wall opening.
+        constexpr float kGlass = 12.0f;
         const QVector3D center = a + unit * static_cast<float>(win.position_along);
         push_oriented_box(untex, center,
                           static_cast<float>(win.width * 0.5),
-                          static_cast<float>(w->thickness * 0.5 + 1.0),
+                          kGlass * 0.5f,
                           static_cast<float>(win.sill_height),
                           static_cast<float>(win.sill_height + win.height),
                           yaw,
@@ -794,7 +947,7 @@ void Viewport3D::set_preset(CameraPreset preset) {
 }
 
 void Viewport3D::paintGL() {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     if (!program_ || !program_->isLinked()) return;
 
@@ -821,43 +974,93 @@ void Viewport3D::paintGL() {
     program_->setUniformValue("u_model", identity);
     program_->setUniformValue("u_shadow_mode", 0);
     program_->setUniformValue("u_albedo", 0);
+
+    // Cull back faces during the solid pass so the user only ever sees
+    // outward sides of closed solids. push_oriented_box / push_wall_box
+    // wind everything CCW from the outside, so GL_BACK is what we drop.
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+
+    auto bind_group_tex = [&](const DrawGroup& g) {
+        QOpenGLTexture* tex = nullptr;
+        if (!g.texture_path.isEmpty()) {
+            const std::string key = g.texture_path.toStdString();
+            auto it = texture_cache_.find(key);
+            if (it == texture_cache_.end()) {
+                QImage img(g.texture_path);
+                if (!img.isNull()) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+                    auto t = std::make_unique<QOpenGLTexture>(img.flipped(Qt::Vertical));
+#else
+                    auto t = std::make_unique<QOpenGLTexture>(img.mirrored(false, true));
+#endif
+                    t->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+                    t->setMagnificationFilter(QOpenGLTexture::Linear);
+                    t->setWrapMode(QOpenGLTexture::Repeat);
+                    it = texture_cache_.emplace(key, std::move(t)).first;
+                }
+            }
+            if (it != texture_cache_.end()) tex = it->second.get();
+        }
+        if (tex) {
+            tex->bind(0);
+            program_->setUniformValue("u_has_texture", 1);
+        } else {
+            program_->setUniformValue("u_has_texture", 0);
+        }
+    };
+
+    // Solid mesh pass. The first 6 vertices are the ground plane; everything
+    // after is walls / boxes / etc. We mark those non-ground pixels in the
+    // stencil buffer so the later planar-shadow pass can skip them — that's
+    // the only way to keep the shadow from bleeding through wall bases at
+    // distances where depth-buffer precision can't tell wall.z=0 apart
+    // from shadow.z=lifted.
     if (mesh_groups_.empty()) {
         program_->setUniformValue("u_has_texture", 0);
-        glDrawArrays(GL_TRIANGLES, 0, vertex_count_);
+        // Ground first, no stencil writes.
+        glDrawArrays(GL_TRIANGLES, 0, std::min(6, vertex_count_));
+        // Non-ground geometry, write 1 to stencil where it lands.
+        if (vertex_count_ > 6) {
+            glEnable(GL_STENCIL_TEST);
+            glStencilFunc(GL_ALWAYS, 1, 0xFF);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+            glStencilMask(0xFF);
+            glDrawArrays(GL_TRIANGLES, 6, vertex_count_ - 6);
+            glDisable(GL_STENCIL_TEST);
+            glStencilMask(0x00);
+        }
     } else {
-        for (const auto& g : mesh_groups_) {
-            QOpenGLTexture* tex = nullptr;
-            if (!g.texture_path.isEmpty()) {
-                const std::string key = g.texture_path.toStdString();
-                auto it = texture_cache_.find(key);
-                if (it == texture_cache_.end()) {
-                    QImage img(g.texture_path);
-                    if (!img.isNull()) {
-                        // QImage::flipped() was added in Qt 6.9; fall back to
-                        // the deprecated mirrored() on older Qt versions so
-                        // CI on 6.7.x still builds.
-#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
-                        auto t = std::make_unique<QOpenGLTexture>(img.flipped(Qt::Vertical));
-#else
-                        auto t = std::make_unique<QOpenGLTexture>(img.mirrored(false, true));
-#endif
-                        t->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-                        t->setMagnificationFilter(QOpenGLTexture::Linear);
-                        t->setWrapMode(QOpenGLTexture::Repeat);
-                        it = texture_cache_.emplace(key, std::move(t)).first;
-                    }
-                }
-                if (it != texture_cache_.end()) tex = it->second.get();
-            }
-            if (tex) {
-                tex->bind(0);
-                program_->setUniformValue("u_has_texture", 1);
-            } else {
-                program_->setUniformValue("u_has_texture", 0);
-            }
+        // First group is the untextured bucket and holds the ground; split it.
+        const auto& first = mesh_groups_.front();
+        bind_group_tex(first);
+        const int ground_count = std::min(6, first.count);
+        glDrawArrays(GL_TRIANGLES, first.offset, ground_count);
+
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_ALWAYS, 1, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+        glStencilMask(0xFF);
+
+        if (first.count > ground_count) {
+            glDrawArrays(GL_TRIANGLES, first.offset + ground_count,
+                         first.count - ground_count);
+        }
+        for (std::size_t i = 1; i < mesh_groups_.size(); ++i) {
+            const auto& g = mesh_groups_[i];
+            bind_group_tex(g);
             glDrawArrays(GL_TRIANGLES, g.offset, g.count);
         }
+
+        glDisable(GL_STENCIL_TEST);
+        glStencilMask(0x00);
     }
+
+    // Subsequent passes (planar shadows, line overlay, gizmo, gnomon) draw
+    // single-sided or non-closed geometry — restore double-sided rendering
+    // so they don't get half-culled.
+    glDisable(GL_CULL_FACE);
 
     if (vertex_count_ > 6) {
         const float az = sun_azimuth_deg_ * static_cast<float>(std::numbers::pi) / 180.0f;
@@ -867,6 +1070,10 @@ void Viewport3D::paintGL() {
                                 std::sin(al));
         const QVector3D L = -sun_dir;
         const float lz = std::min(L.z(), -0.05f);
+        // Shadow lifted only 1 mm above the floor — enough to avoid
+        // z-fighting the ground plane. The wall-base z-fight is handled
+        // by the stencil mask above, not by lifting the shadow into the
+        // wall.
         QMatrix4x4 shadow(
             1.0f, 0.0f, -L.x() / lz, 0.0f,
             0.0f, 1.0f, -L.y() / lz, 0.0f,
@@ -876,15 +1083,21 @@ void Viewport3D::paintGL() {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
-        glPolygonOffset(-1.0f, -1.0f);
-        glEnable(GL_POLYGON_OFFSET_FILL);
+
+        // Only render shadow where the stencil is 0 — i.e. pixels not
+        // covered by walls / boxes / other opaque entities. This blocks
+        // shadow from bleeding through wall bottoms even when depth
+        // precision can't distinguish wall.z=0 from shadow.z=1.
+        glEnable(GL_STENCIL_TEST);
+        glStencilFunc(GL_EQUAL, 0, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
         program_->setUniformValue("u_model", shadow);
         program_->setUniformValue("u_shadow_mode", 1);
         program_->setUniformValue("u_has_texture", 0);
         glDrawArrays(GL_TRIANGLES, 6, vertex_count_ - 6);
 
-        glDisable(GL_POLYGON_OFFSET_FILL);
+        glDisable(GL_STENCIL_TEST);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
     }
@@ -901,8 +1114,65 @@ void Viewport3D::paintGL() {
     }
 
     render_gizmo();
+    render_gnomon();
 
     program_->release();
+
+    // 2D overlay: axis labels + preset name. QPainter in paintGL is OK in
+    // Qt 6 — it shares the QOpenGLPaintDevice of this widget.
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    QFont font = painter.font();
+    font.setPointSize(9);
+    font.setBold(true);
+    painter.setFont(font);
+
+    constexpr int side = 90;
+    constexpr int margin = 8;
+    const int gx = width() - side - margin;
+    const int gy = margin;
+    // Compute the screen position of each axis tip inside the gnomon box.
+    const float yaw_rad = camera_yaw_ * static_cast<float>(std::numbers::pi) / 180.0f;
+    const float pitch_rad = camera_pitch_ * static_cast<float>(std::numbers::pi) / 180.0f;
+    const float cp = std::cos(pitch_rad);
+    const QVector3D eye(std::cos(yaw_rad) * cp,
+                        std::sin(yaw_rad) * cp,
+                        std::sin(pitch_rad));
+    QMatrix4x4 view; view.lookAt(eye * 400.0f, {0, 0, 0}, {0, 0, 1});
+    QMatrix4x4 proj; proj.ortho(-150.0f, 150.0f, -150.0f, 150.0f, 1.0f, 1000.0f);
+    const QMatrix4x4 mvp = proj * view;
+    auto project_tip = [&](QVector3D world) {
+        const QVector4D clip = mvp * QVector4D(world.x(), world.y(), world.z(), 1.0f);
+        const float nx = clip.x() / clip.w();
+        const float ny = clip.y() / clip.w();
+        const float sx = gx + (nx + 1.0f) * 0.5f * side;
+        const float sy = gy + (1.0f - ny) * 0.5f * side;
+        return QPointF(sx, sy);
+    };
+    auto draw_label = [&](QVector3D tip, const QString& text, QColor color) {
+        const QPointF p = project_tip(tip);
+        painter.setPen(color);
+        painter.drawText(QRectF(p.x() - 12, p.y() - 8, 24, 16),
+                         Qt::AlignCenter, text);
+    };
+    draw_label({110, 0, 0}, "X", QColor(220, 60, 60));
+    draw_label({0, 110, 0}, "Y", QColor(70, 180, 80));
+    draw_label({0, 0, 110}, "Z", QColor(70, 110, 220));
+
+    // Preset name in the corner under the gnomon.
+    QString preset_name;
+    switch (preset_) {
+        case CameraPreset::Iso:   preset_name = "Iso"; break;
+        case CameraPreset::Top:   preset_name = "Top"; break;
+        case CameraPreset::Front: preset_name = "Front"; break;
+        case CameraPreset::Back:  preset_name = "Back"; break;
+        case CameraPreset::Left:  preset_name = "Left"; break;
+        case CameraPreset::Right: preset_name = "Right"; break;
+    }
+    painter.setPen(QColor(60, 60, 80));
+    painter.drawText(QRectF(gx, gy + side, side, 14),
+                     Qt::AlignCenter, preset_name);
 }
 
 Viewport3D::Ray Viewport3D::ray_from_screen(QPointF screen_pos) const {
@@ -1072,7 +1342,7 @@ Selection Viewport3D::pick_at_screen(QPointF screen_pos, float* t_out) const {
                           static_cast<float>(w.end.y()), 0.0f);
         const QVector3D dir = e - s;
         const float len = dir.length();
-        if (len < 1e-5f) continue;
+        if (!(len > 1e-5f)) continue;  // NaN-safe
         const QVector3D unit = dir / len;
         const float yaw = std::atan2(unit.y(), unit.x());
         const QVector3D center = (s + e) * 0.5f;
@@ -1306,6 +1576,11 @@ bool Viewport3D::selection_centroid(QVector3D& out) const {
         switch (sel.kind) {
             case SelectKind::Wall:
                 if (auto* w = document_.find_wall(sel.id)) {
+                    // Display the gizmo at the wall's mid-height so it
+                    // sits visually on the wall, not on the floor. The
+                    // actual rotation pivot for tilt is handled inside
+                    // push_oriented_box (pivot_at_base = true), so this z
+                    // value is only for display / RotZ which is XY-only.
                     c = QVector3D(static_cast<float>((w->start.x() + w->end.x()) * 0.5),
                                   static_cast<float>((w->start.y() + w->end.y()) * 0.5),
                                   static_cast<float>(w->height * 0.5));
@@ -1396,11 +1671,13 @@ double Viewport3D::rotation_angle_for(GizmoAxis axis, QPointF screen_pos, bool* 
         case GizmoAxis::RotZ: n = {0, 0, 1}; break;
         default: return 0.0;
     }
+    const Ray ray = ray_from_screen(screen_pos);
     QVector3D hit;
-    if (!ray_plane_intersection(ray_from_screen(screen_pos), gizmo_pivot_, n, hit)) {
-        return 0.0;
-    }
+    if (!ray_plane_intersection(ray, gizmo_pivot_, n, hit)) return 0.0;
     const QVector3D d = hit - gizmo_pivot_;
+    if (!std::isfinite(d.x()) || !std::isfinite(d.y()) || !std::isfinite(d.z())) {
+        return 0.0;  // keep ok=false so apply is skipped
+    }
     if (ok) *ok = true;
     switch (axis) {
         case GizmoAxis::RotX: return std::atan2(d.z(), d.y());
@@ -1411,60 +1688,75 @@ double Viewport3D::rotation_angle_for(GizmoAxis axis, QPointF screen_pos, bool* 
 }
 
 void Viewport3D::apply_drag_rotation(GizmoAxis axis, double angle) {
+    if (!std::isfinite(angle)) return;
     const double c = std::cos(angle);
     const double s = std::sin(angle);
-    const Eigen::Vector3d pv{gizmo_pivot_.x(), gizmo_pivot_.y(), gizmo_pivot_.z()};
-    auto rotate3 = [&](Eigen::Vector3d p) {
-        p -= pv;
-        Eigen::Vector3d r = p;
+    const double pvx = gizmo_pivot_.x();
+    const double pvy = gizmo_pivot_.y();
+    const double pvz = gizmo_pivot_.z();
+    auto rotate3 = [&](double x, double y, double z,
+                       double& ox, double& oy, double& oz) {
+        const double dx = x - pvx;
+        const double dy = y - pvy;
+        const double dz = z - pvz;
+        double rx = dx, ry = dy, rz = dz;
         switch (axis) {
             case GizmoAxis::RotX:
-                r.x() = p.x();
-                r.y() = c * p.y() - s * p.z();
-                r.z() = s * p.y() + c * p.z();
+                ry = c * dy - s * dz;
+                rz = s * dy + c * dz;
                 break;
             case GizmoAxis::RotY:
-                r.x() = c * p.x() + s * p.z();
-                r.y() = p.y();
-                r.z() = -s * p.x() + c * p.z();
+                rx = c * dx + s * dz;
+                rz = -s * dx + c * dz;
                 break;
             case GizmoAxis::RotZ:
-                r.x() = c * p.x() - s * p.y();
-                r.y() = s * p.x() + c * p.y();
-                r.z() = p.z();
+                rx = c * dx - s * dy;
+                ry = s * dx + c * dy;
                 break;
             default: break;
         }
-        return pv + r;
+        ox = pvx + rx;
+        oy = pvy + ry;
+        oz = pvz + rz;
     };
-    auto rotate_xy_anchor = [&](const Eigen::Vector2d& pos, double z) {
-        const Eigen::Vector3d r = rotate3({pos.x(), pos.y(), z});
-        return std::pair<Eigen::Vector2d, double>{{r.x(), r.y()}, r.z()};
-    };
-
     for (const auto& sel : plan_view_.selections()) {
         const auto it = drag_originals_.find(sel.id);
         if (it == drag_originals_.end()) continue;
         switch (sel.kind) {
             case SelectKind::Wall: {
-                if (axis != GizmoAxis::RotZ) break;
                 auto* w = document_.find_wall(sel.id);
                 if (!w) break;
                 const auto& orig = std::get<cadino::core::Wall>(it->second);
-                auto [s0, z0] = rotate_xy_anchor(orig.start, 0.0);
-                auto [s1, z1] = rotate_xy_anchor(orig.end, 0.0);
-                w->start = s0;
-                w->end = s1;
-                (void)z0; (void)z1;
+                if (axis == GizmoAxis::RotZ) {
+                    // RotZ keeps the wall in the floor plane — rotate its
+                    // endpoints around the pivot in 2D.
+                    double ox = 0, oy = 0, oz = 0;
+                    rotate3(orig.start.x(), orig.start.y(), 0.0, ox, oy, oz);
+                    w->start = Eigen::Vector2d(ox, oy);
+                    rotate3(orig.end.x(), orig.end.y(), 0.0, ox, oy, oz);
+                    w->end = Eigen::Vector2d(ox, oy);
+                } else if (axis == GizmoAxis::RotX) {
+                    w->rotation_x = orig.rotation_x + angle;
+                } else if (axis == GizmoAxis::RotY) {
+                    w->rotation_y = orig.rotation_y + angle;
+                }
                 break;
             }
             case SelectKind::Box: {
                 auto* b = document_.find_box(sel.id);
                 if (!b) break;
                 const auto& orig = std::get<cadino::core::Box>(it->second);
-                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
-                b->position = p;
-                b->base_z = z;
+                // Rotate the box's geometric center around the pivot — for
+                // a single selection that center coincides with the pivot,
+                // so the position stays put and only the rotation field
+                // changes. Multi-select rotates the box around the group.
+                const double cz = orig.base_z + orig.height * 0.5;
+                double ox = 0, oy = 0, oz = 0;
+                rotate3(orig.position.x(), orig.position.y(), cz, ox, oy, oz);
+                b->position = Eigen::Vector2d(ox, oy);
+                b->base_z = oz - orig.height * 0.5;
+                if (axis == GizmoAxis::RotX) b->rotation_x = orig.rotation_x + angle;
+                if (axis == GizmoAxis::RotY) b->rotation_y = orig.rotation_y + angle;
                 if (axis == GizmoAxis::RotZ) b->rotation_z = orig.rotation_z + angle;
                 break;
             }
@@ -1472,29 +1764,37 @@ void Viewport3D::apply_drag_rotation(GizmoAxis axis, double angle) {
                 auto* cy = document_.find_cylinder(sel.id);
                 if (!cy) break;
                 const auto& orig = std::get<cadino::core::Cylinder>(it->second);
-                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
-                cy->position = p;
-                cy->base_z = z;
+                const double cz = orig.base_z + orig.height * 0.5;
+                double ox = 0, oy = 0, oz = 0;
+                rotate3(orig.position.x(), orig.position.y(), cz, ox, oy, oz);
+                cy->position = Eigen::Vector2d(ox, oy);
+                cy->base_z = oz - orig.height * 0.5;
+                if (axis == GizmoAxis::RotX) cy->rotation_x = orig.rotation_x + angle;
+                if (axis == GizmoAxis::RotY) cy->rotation_y = orig.rotation_y + angle;
                 break;
             }
             case SelectKind::Block: {
+                if (axis != GizmoAxis::RotZ) break;
                 auto* bk = document_.find_block(sel.id);
                 if (!bk) break;
                 const auto& orig = std::get<cadino::core::Block>(it->second);
-                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
-                bk->position = p;
-                bk->base_z = z;
-                if (axis == GizmoAxis::RotZ) bk->rotation_z = orig.rotation_z + angle;
+                double ox = 0, oy = 0, oz = 0;
+                rotate3(orig.position.x(), orig.position.y(), orig.base_z, ox, oy, oz);
+                bk->position = Eigen::Vector2d(ox, oy);
+                bk->base_z = oz;
+                bk->rotation_z = orig.rotation_z + angle;
                 break;
             }
             case SelectKind::BlockInstance: {
+                if (axis != GizmoAxis::RotZ) break;
                 auto* bi = document_.find_block_instance(sel.id);
                 if (!bi) break;
                 const auto& orig = std::get<cadino::core::BlockInstance>(it->second);
-                auto [p, z] = rotate_xy_anchor(orig.position, orig.base_z);
-                bi->position = p;
-                bi->base_z = z;
-                if (axis == GizmoAxis::RotZ) bi->rotation_z = orig.rotation_z + angle;
+                double ox = 0, oy = 0, oz = 0;
+                rotate3(orig.position.x(), orig.position.y(), orig.base_z, ox, oy, oz);
+                bi->position = Eigen::Vector2d(ox, oy);
+                bi->base_z = oz;
+                bi->rotation_z = orig.rotation_z + angle;
                 break;
             }
             default: break;
@@ -1741,7 +2041,14 @@ Viewport3D::GizmoAxis Viewport3D::pick_gizmo_axis(QPointF screen_pos) const {
 void Viewport3D::render_gizmo() {
     QVector3D pivot;
     if (!selection_centroid(pivot)) return;
-    gizmo_pivot_ = pivot;
+    // While dragging, freeze the pivot at its press-time value so rotation
+    // and translation deltas stay anchored. Otherwise the gizmo would chase
+    // the moving selection and the rotation would spiral outward.
+    if (!entity_dragging_) {
+        gizmo_pivot_ = pivot;
+    } else {
+        pivot = gizmo_pivot_;
+    }
     const float len = gizmo_length();
 
     auto vert = [](QVector3D p, QVector3D color) {
@@ -1852,11 +2159,84 @@ void Viewport3D::render_gizmo() {
     program_->setUniformValue("u_shadow_mode", 2);
     program_->setUniformValue("u_has_texture", 0);
 
+    // Single pass with depth test on so the wall (or any other solid) hides
+    // the gizmo segments that fall behind it. An earlier "X-ray" second
+    // pass was drawing the occluded handles fully opaque on top, which
+    // made the wall read as semi-transparent.
+    glLineWidth(3.0f);
+    glDrawArrays(GL_LINES, 0, static_cast<int>(verts.size()));
+    glLineWidth(1.0f);
+    gizmo_vao_.release();
+}
+
+void Viewport3D::render_gnomon() {
+    // Build three short colored axes around the origin so the user can see
+    // which way world X/Y/Z point under the current camera. Rendered into a
+    // small viewport at the top-right so it stays out of the way.
+    const float L = 100.0f;
+    auto vert = [](QVector3D p, QVector3D color) {
+        return Vertex{p.x(), p.y(), p.z(), 0.0f, 0.0f, 1.0f,
+                      color.x(), color.y(), color.z(),
+                      1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    };
+    std::vector<Vertex> verts;
+    verts.reserve(6);
+    verts.push_back(vert({0, 0, 0}, {0.95f, 0.25f, 0.25f}));
+    verts.push_back(vert({L, 0, 0}, {0.95f, 0.25f, 0.25f}));
+    verts.push_back(vert({0, 0, 0}, {0.30f, 0.85f, 0.35f}));
+    verts.push_back(vert({0, L, 0}, {0.30f, 0.85f, 0.35f}));
+    verts.push_back(vert({0, 0, 0}, {0.35f, 0.55f, 0.95f}));
+    verts.push_back(vert({0, 0, L}, {0.35f, 0.55f, 0.95f}));
+
+    gizmo_vao_.bind();
+    gizmo_vbo_.bind();
+    gizmo_vbo_.allocate(verts.data(), static_cast<int>(verts.size() * sizeof(Vertex)));
+    program_->setAttributeBuffer(0, GL_FLOAT, 0, 3, sizeof(Vertex));
+    program_->enableAttributeArray(0);
+    program_->setAttributeBuffer(1, GL_FLOAT, sizeof(float) * 3, 3, sizeof(Vertex));
+    program_->enableAttributeArray(1);
+    program_->setAttributeBuffer(2, GL_FLOAT, sizeof(float) * 6, 3, sizeof(Vertex));
+    program_->enableAttributeArray(2);
+    program_->setAttributeBuffer(3, GL_FLOAT, sizeof(float) * 9, 2, sizeof(Vertex));
+    program_->enableAttributeArray(3);
+    program_->setAttributeBuffer(4, GL_FLOAT, sizeof(float) * 11, 3, sizeof(Vertex));
+    program_->enableAttributeArray(4);
+    gizmo_vbo_.release();
+
+    // Mini-view: same rotation as the main camera but no panning, looking at
+    // the origin, with an orthographic box tight around the axes.
+    const float yaw_rad = camera_yaw_ * static_cast<float>(std::numbers::pi) / 180.0f;
+    const float pitch_rad = camera_pitch_ * static_cast<float>(std::numbers::pi) / 180.0f;
+    const float cp = std::cos(pitch_rad);
+    const QVector3D eye(std::cos(yaw_rad) * cp,
+                        std::sin(yaw_rad) * cp,
+                        std::sin(pitch_rad));
+    QMatrix4x4 view;
+    view.lookAt(eye * 400.0f, {0, 0, 0}, {0, 0, 1});
+    QMatrix4x4 proj;
+    proj.ortho(-150.0f, 150.0f, -150.0f, 150.0f, 1.0f, 1000.0f);
+    program_->setUniformValue("u_view_proj", proj * view);
+    QMatrix4x4 identity;
+    program_->setUniformValue("u_model", identity);
+    program_->setUniformValue("u_shadow_mode", 2);
+    program_->setUniformValue("u_has_texture", 0);
+
+    // Carve a tiny viewport in the top-right corner of the widget.
+    const int w = width();
+    const int h = height();
+    constexpr int side = 90;
+    constexpr int margin = 8;
+    GLint old_vp[4];
+    glGetIntegerv(GL_VIEWPORT, old_vp);
+    glViewport(w - side - margin, h - side - margin, side, side);
+
     glDisable(GL_DEPTH_TEST);
     glLineWidth(3.0f);
     glDrawArrays(GL_LINES, 0, static_cast<int>(verts.size()));
     glEnable(GL_DEPTH_TEST);
     glLineWidth(1.0f);
+
+    glViewport(old_vp[0], old_vp[1], old_vp[2], old_vp[3]);
     gizmo_vao_.release();
 }
 
@@ -1935,7 +2315,12 @@ void Viewport3D::mousePressEvent(QMouseEvent* event) {
             update();
             return;
         }
-        if (!shift) plan_view_.clear_selection();
+        // Defer clearing to release-without-drag so that left-drag (camera
+        // orbit in Iso preset) doesn't deselect the current selection.
+        if (!shift) {
+            pending_clear_on_release_ = true;
+            press_pos_ = event->position();
+        }
     }
     setCursor(Qt::ClosedHandCursor);
 }
@@ -2006,6 +2391,13 @@ void Viewport3D::mouseMoveEvent(QMouseEvent* event) {
     const QPointF delta = event->position() - drag_last_;
     drag_last_ = event->position();
 
+    if (pending_clear_on_release_) {
+        const QPointF d = event->position() - press_pos_;
+        if (std::abs(d.x()) + std::abs(d.y()) > 4.0) {
+            pending_clear_on_release_ = false;
+        }
+    }
+
     if (drag_button_ == Qt::LeftButton && preset_ == CameraPreset::Iso) {
         camera_yaw_ -= static_cast<float>(delta.x()) * 0.4f;
         camera_pitch_ = std::clamp(camera_pitch_ + static_cast<float>(delta.y()) * 0.4f,
@@ -2029,6 +2421,11 @@ void Viewport3D::mouseReleaseEvent(QMouseEvent*) {
             emit_drag_commands();
             plan_view_.notify_document_modified();
         }
+    }
+    if (pending_clear_on_release_) {
+        plan_view_.clear_selection();
+        pending_clear_on_release_ = false;
+        update();
     }
     drag_button_ = Qt::NoButton;
     unsetCursor();

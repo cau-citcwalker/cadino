@@ -204,11 +204,23 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, t] : doc.texts()) {
-        const double d = std::hypot(model_pos.x() - t.position.x(),
-                                    model_pos.y() - t.position.y());
-        if (d <= pick_radius && d < best_dist) {
-            best_dist = d;
-            best = {id, SelectKind::Text};
+        // Text is anchored at .position but extends along a baseline of
+        // roughly `text.size() * height * 0.6` mm. Pick within a generous
+        // bounding box that covers the actual rendered glyphs so the user
+        // doesn't have to hit the invisible anchor pixel.
+        const double half_h = std::max(t.height * 0.5, pick_radius);
+        const double half_w = std::max(t.text.size() * t.height * 0.35, pick_radius);
+        const double dx = model_pos.x() - t.position.x();
+        const double dy = model_pos.y() - t.position.y();
+        if (std::abs(dx) <= half_w + pick_radius &&
+            std::abs(dy) <= half_h + pick_radius) {
+            const double d = std::max(std::abs(dx) - half_w,
+                                      std::abs(dy) - half_h);
+            const double pick_d = std::max(0.0, d);
+            if (pick_d < best_dist) {
+                best_dist = pick_d;
+                best = {id, SelectKind::Text};
+            }
         }
     }
     for (const auto& [id, l] : doc.leaders()) {
@@ -218,6 +230,20 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         if (d <= pick_radius && d < best_dist) {
             best_dist = d;
             best = {id, SelectKind::Leader};
+        }
+        // Also accept clicks on the text body next to the anchor.
+        const double tdx = model_pos.x() - l.text_position.x();
+        const double tdy = model_pos.y() - l.text_position.y();
+        const double half_h = std::max(l.height * 0.5, pick_radius);
+        const double half_w = std::max(l.text.size() * l.height * 0.35, pick_radius);
+        if (std::abs(tdx) <= half_w + pick_radius &&
+            std::abs(tdy) <= half_h + pick_radius) {
+            const double pd = std::max({0.0, std::abs(tdx) - half_w,
+                                              std::abs(tdy) - half_h});
+            if (pd < best_dist) {
+                best_dist = pd;
+                best = {id, SelectKind::Leader};
+            }
         }
     }
     return best;

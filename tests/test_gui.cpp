@@ -330,3 +330,174 @@ TEST_CASE("Viewport3D: click on X-axis gizmo handle drags box along world X",
     REQUIRE(moved->position.x() > 1100.0);
     REQUIRE(moved->position.y() == Catch::Approx(0.0).margin(10.0));
 }
+
+TEST_CASE("Viewport3D: rotation gizmo on a Box completes without crashing",
+          "[gui][gizmo][rotation]") {
+    QSurfaceFormat fmt;
+    fmt.setVersion(3, 3);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(fmt);
+
+    cadino::core::Document doc;
+    cadino::core::CommandStack stack(doc);
+    cadino::core::Box b;
+    b.position = {0, 0};
+    b.size_xy = {600, 400};
+    b.height = 300;
+    b.base_z = 0;
+    const auto id = doc.add_box(std::move(b));
+
+    cadino::ui::PlanView pv(doc, stack);
+    cadino::ui::Viewport3D vp(doc, stack, pv);
+    vp.resize(800, 600);
+    vp.show();
+    if (!QTest::qWaitForWindowExposed(&vp)) {
+        WARN("Offscreen GL context not available — skipping rotation test");
+        return;
+    }
+    QTest::qWait(60);
+
+    pv.set_selections({{id, cadino::ui::SelectKind::Box}});
+    vp.update();
+    QTest::qWait(60);
+
+    const QVector3D pivot = vp.selection_centroid_for_test();
+    // RotZ ring lies in the world Z=pivot.z plane around pivot. Pick two
+    // points 30° apart on that ring (radius ~= gizmo_length * 1.15 ~= 500).
+    const float r = 575.0f;
+    const QVector3D p1 = pivot + QVector3D(r, 0.0f, 0.0f);
+    const QVector3D p2 = pivot + QVector3D(r * std::cos(0.5f), r * std::sin(0.5f), 0.0f);
+    const QPointF press = vp.world_to_screen(p1);
+    const QPointF release_pt = vp.world_to_screen(p2);
+
+    QTest::mousePress(&vp, Qt::LeftButton, Qt::NoModifier, press.toPoint());
+    QTest::qWait(10);
+    // Sweep through many intermediate angles to mimic interactive drag.
+    for (int i = 1; i <= 30; ++i) {
+        const float a = float(i) / 30.0f * 0.5f;
+        const QVector3D mid = pivot + QVector3D(r * std::cos(a), r * std::sin(a), 0.0f);
+        const QPointF sp = vp.world_to_screen(mid);
+        QTest::mouseMove(&vp, sp.toPoint());
+        QTest::qWait(2);
+        // Force a paint so any render-side bug surfaces.
+        vp.repaint();
+    }
+    QTest::mouseRelease(&vp, Qt::LeftButton, Qt::NoModifier, release_pt.toPoint());
+    QTest::qWait(10);
+
+    const auto* after = doc.find_box(id);
+    REQUIRE(after != nullptr);
+    INFO("rotation_z = " << after->rotation_z);
+    SUCCEED("rotation did not crash");
+}
+
+TEST_CASE("Viewport3D: RotX gizmo on Box does not crash",
+          "[gui][gizmo][rotation]") {
+    QSurfaceFormat fmt;
+    fmt.setVersion(3, 3);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(fmt);
+
+    cadino::core::Document doc;
+    cadino::core::CommandStack stack(doc);
+    cadino::core::Box b;
+    b.position = {0, 0};
+    b.size_xy = {600, 400};
+    b.height = 300;
+    b.base_z = 0;
+    const auto id = doc.add_box(std::move(b));
+
+    cadino::ui::PlanView pv(doc, stack);
+    cadino::ui::Viewport3D vp(doc, stack, pv);
+    vp.resize(800, 600);
+    vp.show();
+    if (!QTest::qWaitForWindowExposed(&vp)) {
+        WARN("Offscreen GL context not available — skipping");
+        return;
+    }
+    QTest::qWait(60);
+
+    pv.set_selections({{id, cadino::ui::SelectKind::Box}});
+    vp.update();
+    QTest::qWait(60);
+
+    const QVector3D pivot = vp.selection_centroid_for_test();
+    // RotX ring lies in YZ plane around pivot.
+    const float r = 575.0f;
+    const QVector3D p1 = pivot + QVector3D(0.0f, r, 0.0f);
+    const QVector3D p2 = pivot + QVector3D(0.0f, r * std::cos(0.5f), r * std::sin(0.5f));
+    const QPointF press = vp.world_to_screen(p1);
+    const QPointF release_pt = vp.world_to_screen(p2);
+
+    QTest::mousePress(&vp, Qt::LeftButton, Qt::NoModifier, press.toPoint());
+    QTest::qWait(10);
+    for (int i = 1; i <= 20; ++i) {
+        const float a = float(i) / 20.0f * 0.5f;
+        const QVector3D mid = pivot + QVector3D(0.0f, r * std::cos(a), r * std::sin(a));
+        const QPointF sp = vp.world_to_screen(mid);
+        QTest::mouseMove(&vp, sp.toPoint());
+        QTest::qWait(2);
+        vp.repaint();
+    }
+    QTest::mouseRelease(&vp, Qt::LeftButton, Qt::NoModifier, release_pt.toPoint());
+    QTest::qWait(10);
+
+    REQUIRE(doc.find_box(id) != nullptr);
+    SUCCEED("RotX rotation did not crash");
+}
+
+TEST_CASE("MainWindow: full app rotation of a Box does not crash",
+          "[gui][gizmo][rotation][mainwindow]") {
+    QSurfaceFormat fmt;
+    fmt.setVersion(3, 3);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(fmt);
+
+    cadino::app::MainWindow mw;
+    mw.resize(1200, 800);
+    mw.show();
+    if (!QTest::qWaitForWindowExposed(&mw)) {
+        WARN("Offscreen GL context not available — skipping MainWindow rotation test");
+        return;
+    }
+    QTest::qWait(80);
+
+    auto& doc = mw.document();
+    cadino::core::Box b;
+    b.position = {0, 0};
+    b.size_xy = {600, 400};
+    b.height = 300;
+    b.base_z = 0;
+    const auto id = doc.add_box(std::move(b));
+
+    auto* pv = mw.plan_view_widget();
+    auto* vp = mw.viewport_3d_widget();
+    REQUIRE(pv != nullptr);
+    REQUIRE(vp != nullptr);
+
+    pv->set_selections({{id, cadino::ui::SelectKind::Box}});
+    vp->update();
+    QTest::qWait(80);
+
+    const QVector3D pivot = vp->selection_centroid_for_test();
+    const float r = 575.0f;
+    const QVector3D p1 = pivot + QVector3D(r, 0.0f, 0.0f);
+    const QPointF press = vp->world_to_screen(p1);
+
+    QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, press.toPoint());
+    QTest::qWait(10);
+    for (int i = 1; i <= 30; ++i) {
+        const float a = float(i) / 30.0f * 0.6f;
+        const QVector3D mid = pivot + QVector3D(r * std::cos(a), r * std::sin(a), 0.0f);
+        const QPointF sp = vp->world_to_screen(mid);
+        QTest::mouseMove(vp, sp.toPoint());
+        QTest::qWait(2);
+    }
+    const QVector3D mid_end = pivot + QVector3D(r * std::cos(0.6f), r * std::sin(0.6f), 0.0f);
+    const QPointF release_pt = vp->world_to_screen(mid_end);
+    QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, release_pt.toPoint());
+    QTest::qWait(20);
+
+    REQUIRE(doc.find_box(id) != nullptr);
+    SUCCEED("MainWindow rotation did not crash");
+}
