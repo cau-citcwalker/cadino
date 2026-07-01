@@ -43,7 +43,7 @@ void NurbsCurveTool::finish(PlanView& view) {
     curve.degree = degree_;
     curve.control_points.reserve(control_points_.size());
     for (const QPointF& p : control_points_) {
-        curve.control_points.emplace_back(p.x(), p.y(), 0.0);
+        curve.control_points.push_back(view.plane_to_world(p));
     }
     view.command_stack().execute(
         std::make_unique<cadino::core::AddNurbsCurveCommand>(std::move(curve)));

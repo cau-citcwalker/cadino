@@ -19,8 +19,30 @@ void WallTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton butto
     }
 
     cadino::core::Wall w;
-    w.start = {start_->x(), start_->y()};
-    w.end = {model_pos.x(), model_pos.y()};
+    switch (view.plane()) {
+        case DrawPlane::Top:
+            w.start = {start_->x(), start_->y()};
+            w.end   = {model_pos.x(), model_pos.y()};
+            break;
+        case DrawPlane::Front: {
+            // (u, v) = (X, Z). Wall runs along X at Y=0; height = |dv|.
+            const double u_lo = std::min(start_->x(), model_pos.x());
+            const double u_hi = std::max(start_->x(), model_pos.x());
+            w.start = {u_lo, 0.0};
+            w.end   = {u_hi, 0.0};
+            w.height = std::max(1.0, std::abs(model_pos.y() - start_->y()));
+            break;
+        }
+        case DrawPlane::Right: {
+            // (u, v) = (Y, Z). Wall runs along Y at X=0.
+            const double u_lo = std::min(start_->x(), model_pos.x());
+            const double u_hi = std::max(start_->x(), model_pos.x());
+            w.start = {0.0, u_lo};
+            w.end   = {0.0, u_hi};
+            w.height = std::max(1.0, std::abs(model_pos.y() - start_->y()));
+            break;
+        }
+    }
     view.command_stack().execute(
         std::make_unique<cadino::core::AddWallCommand>(std::move(w)));
 

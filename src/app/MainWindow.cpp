@@ -650,9 +650,11 @@ void MainWindow::activate_select_tool() {
 }
 
 void MainWindow::activate_wall_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::WallTool>());
+    set_tool_all_views<cadino::ui::WallTool>();
     if (wall_action_) wall_action_->setChecked(true);
-    statusBar()->showMessage("Wall tool — click two points to draw a wall (Esc to cancel)");
+    statusBar()->showMessage(
+        "Wall — click two points. In plan the segment runs between clicks; "
+        "in elevation the horizontal span sets X (or Y) extent, vertical span sets height. Esc cancels.");
 }
 
 void MainWindow::activate_box_tool() {
@@ -684,17 +686,18 @@ void MainWindow::activate_window_tool() {
 }
 
 void MainWindow::activate_curve_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::NurbsCurveTool>());
+    set_tool_all_views<cadino::ui::NurbsCurveTool>();
     if (curve_action_) curve_action_->setChecked(true);
     statusBar()->showMessage(
         "NURBS curve — left-click adds control points, right-click to finish (Esc cancels)");
 }
 
 void MainWindow::activate_surface_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::NurbsSurfaceTool>());
+    set_tool_all_views<cadino::ui::NurbsSurfaceTool>();
     if (surface_action_) surface_action_->setChecked(true);
     statusBar()->showMessage(
-        "NURBS surface — click two corners to drop a 4x4 grid at 1500 mm (Esc cancels)");
+        "NURBS surface — click two corners. Plan drops a 4×4 grid at 1500mm; "
+        "elevation drops the grid on the drafting plane. Esc cancels.");
 }
 
 void MainWindow::activate_slab_tool() {

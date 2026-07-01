@@ -96,49 +96,123 @@ std::vector<Selection> expand_to_group(const cadino::core::Document& doc, Select
     return result.empty() ? std::vector<Selection>{sel} : result;
 }
 
-Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double pick_radius) {
+// Distance from `model_pos` (u, v) to an axis-aligned rectangle
+// [u0, u1] × [v0, v1]. Negative when inside.
+double distance_to_rect(QPointF p, double u0, double u1, double v0, double v1) {
+    const double ex = std::max(u0 - p.x(), p.x() - u1);
+    const double ey = std::max(v0 - p.y(), p.y() - v1);
+    if (ex <= 0.0 && ey <= 0.0) return std::max(ex, ey);
+    return std::hypot(std::max(ex, 0.0), std::max(ey, 0.0));
+}
+
+// Pick a doc entity closest to `model_pos` in the drawing plane `plane`.
+Selection pick_at(const cadino::core::Document& doc, QPointF model_pos,
+                  double pick_radius, DrawPlane plane) {
     Selection best{};
     double best_dist = std::numeric_limits<double>::infinity();
 
-    for (const auto& [id, c] : doc.cylinders()) {
-        const double d = std::hypot(model_pos.x() - c.position.x(),
-                                    model_pos.y() - c.position.y());
-        if (d <= c.radius && d < best_dist) {
-            best_dist = d;
-            best = {id, SelectKind::Cylinder};
+    const int plane_i = static_cast<int>(plane);
+
+    if (plane == DrawPlane::Top) {
+        for (const auto& [id, c] : doc.cylinders()) {
+            const double d = std::hypot(model_pos.x() - c.position.x(),
+                                        model_pos.y() - c.position.y());
+            if (d <= c.radius && d < best_dist) {
+                best_dist = d;
+                best = {id, SelectKind::Cylinder};
+            }
         }
-    }
-    for (const auto& [id, b] : doc.boxes()) {
-        const double d = distance_to_box_footprint(model_pos, b);
-        if (d <= pick_radius && d < best_dist) {
-            best_dist = d;
-            best = {id, SelectKind::Box};
-        }
-    }
-    for (const auto& [id, w] : doc.walls()) {
-        const QPointF a{w.start.x(), w.start.y()};
-        const QPointF b{w.end.x(), w.end.y()};
-        const double tolerance = pick_radius + w.thickness * 0.5;
-        const double d = distance_point_to_segment(model_pos, a, b);
-        if (d <= tolerance && d < best_dist) {
-            best_dist = d;
-            best = {id, SelectKind::Wall};
-        }
-    }
-    for (const auto& [id, curve] : doc.curves()) {
-        const auto samples = curve.tessellate(96);
-        if (samples.size() < 2) continue;
-        for (std::size_t i = 1; i < samples.size(); ++i) {
-            const QPointF a{samples[i - 1].x(), samples[i - 1].y()};
-            const QPointF b{samples[i].x(), samples[i].y()};
-            const double d = distance_point_to_segment(model_pos, a, b);
+        for (const auto& [id, b] : doc.boxes()) {
+            const double d = distance_to_box_footprint(model_pos, b);
             if (d <= pick_radius && d < best_dist) {
                 best_dist = d;
-                best = {id, SelectKind::NurbsCurve};
+                best = {id, SelectKind::Box};
+            }
+        }
+        for (const auto& [id, w] : doc.walls()) {
+            const QPointF a{w.start.x(), w.start.y()};
+            const QPointF b{w.end.x(), w.end.y()};
+            const double tolerance = pick_radius + w.thickness * 0.5;
+            const double d = distance_point_to_segment(model_pos, a, b);
+            if (d <= tolerance && d < best_dist) {
+                best_dist = d;
+                best = {id, SelectKind::Wall};
+            }
+        }
+        for (const auto& [id, curve] : doc.curves()) {
+            const auto samples = curve.tessellate(96);
+            if (samples.size() < 2) continue;
+            for (std::size_t i = 1; i < samples.size(); ++i) {
+                const QPointF a{samples[i - 1].x(), samples[i - 1].y()};
+                const QPointF b{samples[i].x(), samples[i].y()};
+                const double d = distance_point_to_segment(model_pos, a, b);
+                if (d <= pick_radius && d < best_dist) {
+                    best_dist = d;
+                    best = {id, SelectKind::NurbsCurve};
+                }
+            }
+        }
+    } else {
+        // Elevation pick: project every entity into the plane's (u, v).
+        auto pick_u = [&](double x, double y) {
+            return (plane == DrawPlane::Front) ? x : y;
+        };
+        for (const auto& [id, c] : doc.cylinders()) {
+            const double u_center = pick_u(c.position.x(), c.position.y());
+            const double d = distance_to_rect(model_pos,
+                                              u_center - c.radius, u_center + c.radius,
+                                              c.base_z, c.base_z + c.height);
+            if (d <= pick_radius && d < best_dist) {
+                best_dist = d;
+                best = {id, SelectKind::Cylinder};
+            }
+        }
+        for (const auto& [id, b] : doc.boxes()) {
+            const double u_center = pick_u(b.position.x(), b.position.y());
+            const double half = 0.5 * ((plane == DrawPlane::Front)
+                ? b.size_xy.x() : b.size_xy.y());
+            const double d = distance_to_rect(model_pos,
+                                              u_center - half, u_center + half,
+                                              b.base_z, b.base_z + b.height);
+            if (d <= pick_radius && d < best_dist) {
+                best_dist = d;
+                best = {id, SelectKind::Box};
+            }
+        }
+        for (const auto& [id, w] : doc.walls()) {
+            const double u0 = std::min(pick_u(w.start.x(), w.start.y()),
+                                        pick_u(w.end.x(),   w.end.y()));
+            const double u1 = std::max(pick_u(w.start.x(), w.start.y()),
+                                        pick_u(w.end.x(),   w.end.y()));
+            const double d = distance_to_rect(model_pos, u0, u1, 0.0, w.height);
+            if (d <= pick_radius && d < best_dist) {
+                best_dist = d;
+                best = {id, SelectKind::Wall};
+            }
+        }
+        for (const auto& [id, curve] : doc.curves()) {
+            const auto samples = curve.tessellate(96);
+            if (samples.size() < 2) continue;
+            auto project = [&](const Eigen::Vector3d& v) {
+                switch (plane) {
+                    case DrawPlane::Front: return QPointF(v.x(), v.z());
+                    case DrawPlane::Right: return QPointF(v.y(), v.z());
+                    default:               return QPointF(v.x(), v.y());
+                }
+            };
+            for (std::size_t i = 1; i < samples.size(); ++i) {
+                const QPointF a = project(samples[i - 1]);
+                const QPointF b = project(samples[i]);
+                const double d = distance_point_to_segment(model_pos, a, b);
+                if (d <= pick_radius && d < best_dist) {
+                    best_dist = d;
+                    best = {id, SelectKind::NurbsCurve};
+                }
             }
         }
     }
     for (const auto& [id, surf] : doc.surfaces()) {
+        if (plane != DrawPlane::Top) continue;  // XY bbox only meaningful in plan
         if (surf.rows < 2 || surf.cols < 2) continue;
         // Quick axis-aligned bbox of the control polygon footprint.
         double minx = surf.control_points[0].x();
@@ -157,6 +231,7 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, block] : doc.blocks()) {
+        if (plane != DrawPlane::Top) break;
         bool hit = false;
         for (const auto& local_b : block.boxes) {
             if (point_in_box_footprint(model_pos, block.world_box(local_b))) {
@@ -180,6 +255,7 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, inst] : doc.block_instances()) {
+        if (plane != DrawPlane::Top) break;
         const auto* def = doc.find_block_def(inst.definition_id);
         if (!def) continue;
         bool hit = false;
@@ -205,6 +281,7 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, dim] : doc.dimensions()) {
+        if (dim.plane != plane_i) continue;
         const double dx = dim.end.x() - dim.start.x();
         const double dy = dim.end.y() - dim.start.y();
         const double len = std::hypot(dx, dy);
@@ -222,6 +299,7 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, t] : doc.texts()) {
+        if (t.plane != plane_i) continue;
         // Text is anchored at .position but extends along a baseline of
         // roughly `text.size() * height * 0.6` mm. Pick within a generous
         // bounding box that covers the actual rendered glyphs so the user
@@ -242,6 +320,7 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, l] : doc.leaders()) {
+        if (l.plane != plane_i) continue;
         const QPointF a{l.anchor.x(), l.anchor.y()};
         const QPointF b{l.text_position.x(), l.text_position.y()};
         const double d = distance_point_to_segment(model_pos, a, b);
@@ -339,7 +418,7 @@ void SelectTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
         }
     }
 
-    Selection hit = pick_at(doc, model_pos, pick_radius);
+    Selection hit = pick_at(doc, model_pos, pick_radius, view.plane());
     if (hit.valid()) {
         cadino::core::EntityId layer_id{};
         switch (hit.kind) {
@@ -543,14 +622,46 @@ void SelectTool::on_release(PlanView& view, QPointF model_pos, Qt::MouseButton b
         }
         std::vector<Selection> hits;
         const auto& doc = view.document();
+        const DrawPlane plane = view.plane();
+        auto pick_u = [plane](double x, double y) {
+            return (plane == DrawPlane::Front) ? x : y;
+        };
         for (const auto& [id, w] : doc.walls()) {
-            if (wall_in_rect(w, rect)) hits.push_back({id, SelectKind::Wall});
+            bool inside;
+            if (plane == DrawPlane::Top) {
+                inside = wall_in_rect(w, rect);
+            } else {
+                const double u0 = std::min(pick_u(w.start.x(), w.start.y()),
+                                            pick_u(w.end.x(),   w.end.y()));
+                const double u1 = std::max(pick_u(w.start.x(), w.start.y()),
+                                            pick_u(w.end.x(),   w.end.y()));
+                inside = rect.contains(u0, 0.0) && rect.contains(u1, w.height);
+            }
+            if (inside) hits.push_back({id, SelectKind::Wall});
         }
         for (const auto& [id, b] : doc.boxes()) {
-            if (box_in_rect(b, rect)) hits.push_back({id, SelectKind::Box});
+            bool inside;
+            if (plane == DrawPlane::Top) {
+                inside = box_in_rect(b, rect);
+            } else {
+                const double u_center = pick_u(b.position.x(), b.position.y());
+                const double half = 0.5 * ((plane == DrawPlane::Front)
+                    ? b.size_xy.x() : b.size_xy.y());
+                inside = rect.contains(u_center - half, b.base_z) &&
+                         rect.contains(u_center + half, b.base_z + b.height);
+            }
+            if (inside) hits.push_back({id, SelectKind::Box});
         }
         for (const auto& [id, c] : doc.cylinders()) {
-            if (cylinder_in_rect(c, rect)) hits.push_back({id, SelectKind::Cylinder});
+            bool inside;
+            if (plane == DrawPlane::Top) {
+                inside = cylinder_in_rect(c, rect);
+            } else {
+                const double u_center = pick_u(c.position.x(), c.position.y());
+                inside = rect.contains(u_center - c.radius, c.base_z) &&
+                         rect.contains(u_center + c.radius, c.base_z + c.height);
+            }
+            if (inside) hits.push_back({id, SelectKind::Cylinder});
         }
         std::vector<Selection> expanded;
         for (const auto& h : hits) {

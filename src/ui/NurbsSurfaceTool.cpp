@@ -38,12 +38,24 @@ void NurbsSurfaceTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButt
     s.cols = 4;
     s.control_points.reserve(static_cast<std::size_t>(s.rows * s.cols));
     for (int r = 0; r < s.rows; ++r) {
-        const double u = static_cast<double>(r) / static_cast<double>(s.rows - 1);
-        const double x = minx + u * (maxx - minx);
+        const double t_u = static_cast<double>(r) / static_cast<double>(s.rows - 1);
+        const double du = minx + t_u * (maxx - minx);
         for (int c = 0; c < s.cols; ++c) {
-            const double v = static_cast<double>(c) / static_cast<double>(s.cols - 1);
-            const double y = miny + v * (maxy - miny);
-            s.control_points.emplace_back(x, y, default_base_z_);
+            const double t_v = static_cast<double>(c) / static_cast<double>(s.cols - 1);
+            const double dv = miny + t_v * (maxy - miny);
+            // Interpret grid coords through the drafting plane so a surface
+            // drawn in Front lives at Y=0 in XZ, Right in YZ, Top in XY.
+            switch (view.plane()) {
+                case DrawPlane::Top:
+                    s.control_points.emplace_back(du, dv, default_base_z_);
+                    break;
+                case DrawPlane::Front:
+                    s.control_points.emplace_back(du, 0.0, dv);
+                    break;
+                case DrawPlane::Right:
+                    s.control_points.emplace_back(0.0, du, dv);
+                    break;
+            }
         }
     }
 

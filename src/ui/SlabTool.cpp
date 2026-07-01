@@ -13,6 +13,13 @@ namespace cadino::ui {
 void SlabTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton button) {
     if (button != Qt::LeftButton) return;
 
+    if (view.plane() != DrawPlane::Top) {
+        // Slabs are horizontal by definition — clicks in elevation don't map
+        // to a sensible XY footprint. Bounce the click and hint at the user.
+        view.update();
+        return;
+    }
+
     if (!corner1_) {
         corner1_ = model_pos;
         hover_ = model_pos;
@@ -56,6 +63,25 @@ void SlabTool::on_cancel(PlanView& view) {
 }
 
 void SlabTool::paint_overlay(QPainter& p, const PlanView& view) const {
+    if (view.plane() != DrawPlane::Top) {
+        // Elevation hint — slab is plan-only.
+        QFont font = p.font();
+        font.setBold(true);
+        p.setFont(font);
+        const QFontMetrics fm(font);
+        const QString msg = QStringLiteral("Slab tool works in the plan (TOP) view only");
+        const QSize ts = fm.size(0, msg);
+        const int pad = 8;
+        const QRectF bg(view.width() / 2.0 - ts.width() / 2.0 - pad,
+                        view.height() - ts.height() - pad * 4,
+                        ts.width() + pad * 2, ts.height() + pad);
+        p.setBrush(QColor(140, 90, 70, 230));
+        p.setPen(Qt::NoPen);
+        p.drawRoundedRect(bg, 4, 4);
+        p.setPen(Qt::white);
+        p.drawText(bg, Qt::AlignCenter, msg);
+        return;
+    }
     if (!corner1_) return;
     QPen pen(QColor(140, 110, 80), 2, Qt::DashLine);
     pen.setCosmetic(true);
