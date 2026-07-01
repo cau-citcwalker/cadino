@@ -7,6 +7,7 @@
 #include "document/Document.hpp"
 
 class QAction;
+class QLabel;
 class QSplitter;
 class QWidget;
 
@@ -56,6 +57,7 @@ private:
     void activate_door_tool();
     void activate_window_tool();
     void activate_slab_tool();
+    void activate_line_tool();
     void activate_curve_tool();
     void activate_surface_tool();
     void activate_dimension_tool();
@@ -128,6 +130,9 @@ private:
     QAction* door_action_{nullptr};
     QAction* window_action_{nullptr};
     QAction* slab_action_{nullptr};
+    QAction* line_action_{nullptr};
+    QAction* ortho_action_{nullptr};
+    QLabel* ortho_status_{nullptr};
     QAction* curve_action_{nullptr};
     QAction* surface_action_{nullptr};
     QAction* dimension_action_{nullptr};

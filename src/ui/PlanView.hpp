@@ -56,6 +56,12 @@ public:
     [[nodiscard]] SnapEngine& snap_engine() noexcept { return snap_; }
     [[nodiscard]] const SnapResult& last_snap() const noexcept { return last_snap_; }
 
+    // Ortho: when enabled (F8), tools should constrain their in-flight
+    // direction to the nearest world axis. Shift can be checked by tools
+    // for a temporary override in either direction.
+    void set_ortho_enabled(bool on) noexcept { ortho_enabled_ = on; }
+    [[nodiscard]] bool ortho_enabled() const noexcept { return ortho_enabled_; }
+
     [[nodiscard]] bool layer_visible(cadino::core::EntityId layer_id) const;
     [[nodiscard]] bool layer_locked(cadino::core::EntityId layer_id) const;
 
@@ -108,6 +114,7 @@ private:
 
     SnapEngine snap_;
     SnapResult last_snap_{};
+    bool ortho_enabled_{false};
 };
 
 }  // namespace cadino::ui

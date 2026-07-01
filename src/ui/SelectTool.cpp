@@ -48,6 +48,26 @@ bool point_in_box_footprint(QPointF p, const cadino::core::Box& b) {
     return std::abs(lx) <= hx && std::abs(ly) <= hy;
 }
 
+// Signed distance from p to the (rotated) box footprint. Negative inside,
+// positive outside. Used so nearby clicks pick a box within pick_radius even
+// when they fall just outside the true footprint.
+double distance_to_box_footprint(QPointF p, const cadino::core::Box& b) {
+    const double hx = b.size_xy.x() * 0.5;
+    const double hy = b.size_xy.y() * 0.5;
+    const double dx = p.x() - b.position.x();
+    const double dy = p.y() - b.position.y();
+    const double c = std::cos(-b.rotation_z);
+    const double s = std::sin(-b.rotation_z);
+    const double lx = c * dx - s * dy;
+    const double ly = s * dx + c * dy;
+    const double ex = std::abs(lx) - hx;
+    const double ey = std::abs(ly) - hy;
+    if (ex <= 0.0 && ey <= 0.0) {
+        return std::max(ex, ey);  // inside — negative
+    }
+    return std::hypot(std::max(ex, 0.0), std::max(ey, 0.0));
+}
+
 cadino::core::EntityId group_of(const cadino::core::Document& doc, Selection sel) {
     if (sel.kind == SelectKind::Wall) {
         if (const auto* w = doc.find_wall(sel.id)) return w->group_id;
@@ -89,10 +109,10 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
         }
     }
     for (const auto& [id, b] : doc.boxes()) {
-        if (point_in_box_footprint(model_pos, b)) {
-            best_dist = 0;
+        const double d = distance_to_box_footprint(model_pos, b);
+        if (d <= pick_radius && d < best_dist) {
+            best_dist = d;
             best = {id, SelectKind::Box};
-            break;
         }
     }
     for (const auto& [id, w] : doc.walls()) {
@@ -154,10 +174,9 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
                 }
             }
         }
-        if (hit) {
+        if (hit && best_dist > 0) {
             best_dist = 0;
             best = {id, SelectKind::Block};
-            break;
         }
     }
     for (const auto& [id, inst] : doc.block_instances()) {
@@ -180,10 +199,9 @@ Selection pick_at(const cadino::core::Document& doc, QPointF model_pos, double p
                 }
             }
         }
-        if (hit) {
+        if (hit && best_dist > 0) {
             best_dist = 0;
             best = {id, SelectKind::BlockInstance};
-            break;
         }
     }
     for (const auto& [id, dim] : doc.dimensions()) {

@@ -6,6 +6,7 @@ add_library(cadino_ui STATIC
     CylinderTool.cpp
     DoorTool.cpp
     SlabTool.cpp
+    LineTool.cpp
     NurbsCurveTool.cpp
     NurbsSurfaceTool.cpp
     DimensionTool.cpp

@@ -947,6 +947,10 @@ void PlanView::wheelEvent(QWheelEvent* event) {
 }
 
 void PlanView::keyPressEvent(QKeyEvent* event) {
+    if (tool_ && tool_->on_key(*this, event)) {
+        update();
+        return;
+    }
     if (event->key() == Qt::Key_Escape && tool_) {
         tool_->on_cancel(*this);
         update();

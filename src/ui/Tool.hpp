@@ -3,6 +3,8 @@
 #include <QPainter>
 #include <QPointF>
 
+class QKeyEvent;
+
 namespace cadino::ui {
 
 class PlanView;
@@ -18,6 +20,10 @@ public:
     virtual void paint_overlay(QPainter& /*p*/, const PlanView& /*view*/) const {}
 
     virtual void on_cancel(PlanView& /*view*/) {}
+
+    // Called by PlanView before its own key handling. Return true if the tool
+    // consumed the event (so PlanView will not fall through to default handling).
+    virtual bool on_key(PlanView& /*view*/, QKeyEvent* /*event*/) { return false; }
 };
 
 }  // namespace cadino::ui

@@ -70,6 +70,7 @@
 #include "NurbsCurveTool.hpp"
 #include "NurbsSurfaceTool.hpp"
 #include "SlabTool.hpp"
+#include "LineTool.hpp"
 #include "Viewport3D.hpp"
 #include "WallTool.hpp"
 #include <QKeySequence>
@@ -140,6 +141,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // construction races with the QSplitter measure pass and leaves both
     // viewports stuck at 0 size.
     QTimer::singleShot(0, this, [this] { set_view_mode(ViewMode::Split); });
+
+    ortho_status_ = new QLabel(this);
+    ortho_status_->setStyleSheet("QLabel { color: #d97706; font-weight: bold; padding: 0 6px; }");
+    statusBar()->addPermanentWidget(ortho_status_);
     statusBar()->showMessage("Ready");
     spdlog::info("MainWindow ready");
 }
@@ -435,6 +440,18 @@ void MainWindow::build_menu() {
             [this] { set_view_mode(ViewMode::Quad); });
 
     view_menu->addSeparator();
+    ortho_action_ = view_menu->addAction("&Ortho Mode");
+    ortho_action_->setCheckable(true);
+    ortho_action_->setShortcut(QKeySequence("F8"));
+    connect(ortho_action_, &QAction::triggered, this, [this](bool on) {
+        plan_view_->set_ortho_enabled(on);
+        if (ortho_status_) ortho_status_->setText(on ? "ORTHO" : "");
+        statusBar()->showMessage(on ? "Ortho ON — direction locked to X/Y axes"
+                                    : "Ortho OFF");
+        plan_view_->update();
+    });
+
+    view_menu->addSeparator();
     auto* sun_a = view_menu->addAction("Sun &Position...");
     sun_a->setShortcut(QKeySequence("Ctrl+Shift+P"));
     connect(sun_a, &QAction::triggered, this, &MainWindow::show_sun_dialog);
@@ -523,9 +540,15 @@ void MainWindow::build_toolbar() {
 
     slab_action_ = tools->addAction("Slab");
     slab_action_->setCheckable(true);
-    slab_action_->setShortcut(QKeySequence("L"));
+    slab_action_->setShortcut(QKeySequence("H"));
     group->addAction(slab_action_);
     connect(slab_action_, &QAction::triggered, this, &MainWindow::activate_slab_tool);
+
+    line_action_ = tools->addAction("Line");
+    line_action_->setCheckable(true);
+    line_action_->setShortcut(QKeySequence("L"));
+    group->addAction(line_action_);
+    connect(line_action_, &QAction::triggered, this, &MainWindow::activate_line_tool);
 
     curve_action_ = tools->addAction("NURBS Curve");
     curve_action_->setCheckable(true);
@@ -593,12 +616,14 @@ void MainWindow::build_toolbar() {
             statusBar()->showMessage(QString("Camera: %1").arg(label));
         });
     };
-    add_preset("Iso", cadino::ui::Viewport3D::CameraPreset::Iso, QKeySequence("1"));
-    add_preset("Top", cadino::ui::Viewport3D::CameraPreset::Top, QKeySequence("2"));
-    add_preset("Front", cadino::ui::Viewport3D::CameraPreset::Front, QKeySequence("3"));
-    add_preset("Back", cadino::ui::Viewport3D::CameraPreset::Back, QKeySequence("4"));
-    add_preset("Left", cadino::ui::Viewport3D::CameraPreset::Left, QKeySequence("5"));
-    add_preset("Right", cadino::ui::Viewport3D::CameraPreset::Right, QKeySequence("6"));
+    // Prefixed so digits stay free for tools that accept numeric input
+    // (Line tool's direct distance entry, dimension override, etc.).
+    add_preset("Iso", cadino::ui::Viewport3D::CameraPreset::Iso, QKeySequence("Ctrl+1"));
+    add_preset("Top", cadino::ui::Viewport3D::CameraPreset::Top, QKeySequence("Ctrl+2"));
+    add_preset("Front", cadino::ui::Viewport3D::CameraPreset::Front, QKeySequence("Ctrl+3"));
+    add_preset("Back", cadino::ui::Viewport3D::CameraPreset::Back, QKeySequence("Ctrl+4"));
+    add_preset("Left", cadino::ui::Viewport3D::CameraPreset::Left, QKeySequence("Ctrl+5"));
+    add_preset("Right", cadino::ui::Viewport3D::CameraPreset::Right, QKeySequence("Ctrl+6"));
 }
 
 void MainWindow::activate_select_tool() {
@@ -655,6 +680,15 @@ void MainWindow::activate_slab_tool() {
     plan_view_->set_tool(std::make_unique<cadino::ui::SlabTool>());
     if (slab_action_) slab_action_->setChecked(true);
     statusBar()->showMessage("Slab tool — click two opposite corners to create a floor slab");
+}
+
+void MainWindow::activate_line_tool() {
+    plan_view_->set_tool(std::make_unique<cadino::ui::LineTool>());
+    if (line_action_) line_action_->setChecked(true);
+    plan_view_->setFocus();
+    statusBar()->showMessage(
+        "Line — click points; type a number then Enter for direct distance; "
+        "Shift toggles ortho; right-click or Enter to finish (Esc cancels)");
 }
 
 void MainWindow::activate_dimension_tool() {

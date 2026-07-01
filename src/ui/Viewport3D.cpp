@@ -2398,11 +2398,15 @@ void Viewport3D::mouseMoveEvent(QMouseEvent* event) {
         }
     }
 
-    if (drag_button_ == Qt::LeftButton && preset_ == CameraPreset::Iso) {
+    const bool shift = (QApplication::keyboardModifiers() & Qt::ShiftModifier) != 0;
+    // Right-drag = orbit, Shift+Right-drag = pan, Middle-drag = pan (fallback).
+    // Left-drag no longer moves the camera so entity picking stays reliable.
+    if (drag_button_ == Qt::RightButton && !shift && preset_ == CameraPreset::Iso) {
         camera_yaw_ -= static_cast<float>(delta.x()) * 0.4f;
         camera_pitch_ = std::clamp(camera_pitch_ + static_cast<float>(delta.y()) * 0.4f,
                                     -85.0f, 85.0f);
-    } else if (drag_button_ == Qt::MiddleButton || drag_button_ == Qt::RightButton) {
+    } else if (drag_button_ == Qt::MiddleButton ||
+               (drag_button_ == Qt::RightButton && shift)) {
         const float yaw_rad = camera_yaw_ * static_cast<float>(std::numbers::pi) / 180.0f;
         const QVector3D right(-std::sin(yaw_rad), std::cos(yaw_rad), 0.0f);
         const QVector3D forward(std::cos(yaw_rad), std::sin(yaw_rad), 0.0f);
