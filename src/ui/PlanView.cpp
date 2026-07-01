@@ -138,20 +138,25 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_boxes(p);
     draw_cylinders(p);
     draw_walls(p);
-    draw_doors_windows(p);
+    if (plane_ == DrawPlane::Top) {
+        // These entity types are 2D-in-XY and only meaningful in the plan view
+        // for now (they don't yet carry a plane tag).
+        draw_doors_windows(p);
+        draw_blocks(p);
+        draw_block_instances(p);
+        draw_surfaces(p);
+        draw_dimensions(p);
+        draw_texts(p);
+        draw_leaders(p);
+        draw_angular_dims(p);
+        draw_radial_dims(p);
+    }
     draw_curves(p);
-    draw_blocks(p);
-    draw_block_instances(p);
-    draw_surfaces(p);
-    draw_dimensions(p);
-    draw_texts(p);
-    draw_leaders(p);
-    draw_angular_dims(p);
-    draw_radial_dims(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
     draw_snap_marker(p);
+    draw_view_label(p);
 }
 
 void PlanView::draw_slabs(QPainter& p) {
@@ -280,25 +285,150 @@ bool PlanView::layer_locked(cadino::core::EntityId layer_id) const {
 }
 
 QPointF PlanView::apply_snap(QPointF model_pos) {
-    if (plane_ != DrawPlane::Top) {
-        // Elevation views: entity-based snap points live in the XY plane and
-        // don't project cleanly here. Snap to the plane's grid only.
-        last_snap_ = {};
-        if (snap_.grid_enabled()) {
-            const double step = snap_.grid_step();
-            const QPointF snapped{std::round(model_pos.x() / step) * step,
-                                  std::round(model_pos.y() / step) * step};
-            if (std::hypot(model_pos.x() - snapped.x(),
-                           model_pos.y() - snapped.y()) < 12.0 / zoom_) {
-                last_snap_ = {snapped, SnapKind::Grid};
-                return snapped;
+    const double tol = 12.0 / zoom_;
+    if (plane_ == DrawPlane::Top) {
+        last_snap_ = snap_.snap(model_pos, document_, tol);
+        return last_snap_.found() ? last_snap_.position : model_pos;
+    }
+
+    // Elevation: run a simplified snap ourselves — project every entity key
+    // point into this plane's (u, v) coords, then pick the closest within
+    // tolerance. Falls back to grid if nothing is close.
+    last_snap_ = {};
+    double best_d = tol;
+    SnapResult best{};
+
+    auto consider = [&](QPointF candidate, SnapKind kind) {
+        const double d = std::hypot(candidate.x() - model_pos.x(),
+                                    candidate.y() - model_pos.y());
+        if (d < best_d) {
+            best_d = d;
+            best = {candidate, kind};
+        }
+    };
+
+    if (snap_.endpoint_enabled()) {
+        // Wall base/top endpoints and corner extents projected.
+        for (const auto& [id, w] : document_.walls()) {
+            if (!layer_visible(w.layer_id)) continue;
+            const QPointF s = world_to_plane({w.start.x(), w.start.y(), 0.0});
+            const QPointF e = world_to_plane({w.end.x(),   w.end.y(),   0.0});
+            const QPointF s_top = world_to_plane({w.start.x(), w.start.y(), w.height});
+            const QPointF e_top = world_to_plane({w.end.x(),   w.end.y(),   w.height});
+            consider(s, SnapKind::Endpoint);
+            consider(e, SnapKind::Endpoint);
+            consider(s_top, SnapKind::Endpoint);
+            consider(e_top, SnapKind::Endpoint);
+        }
+        for (const auto& [id, curve] : document_.curves()) {
+            if (!layer_visible(curve.layer_id)) continue;
+            for (const auto& cp : curve.control_points) {
+                consider(world_to_plane(cp), SnapKind::Endpoint);
             }
         }
-        return model_pos;
     }
-    const double tol = 12.0 / zoom_;
-    last_snap_ = snap_.snap(model_pos, document_, tol);
-    return last_snap_.found() ? last_snap_.position : model_pos;
+    if (snap_.corner_enabled()) {
+        for (const auto& [id, b] : document_.boxes()) {
+            if (!layer_visible(b.layer_id)) continue;
+            const double hx = b.size_xy.x() * 0.5;
+            const double hy = b.size_xy.y() * 0.5;
+            const double c = std::cos(b.rotation_z);
+            const double s = std::sin(b.rotation_z);
+            auto corner = [&](double lx, double ly, double lz) {
+                return world_to_plane({
+                    b.position.x() + c * lx - s * ly,
+                    b.position.y() + s * lx + c * ly,
+                    b.base_z + lz});
+            };
+            for (double sx : {-hx, hx})
+                for (double sy : {-hy, hy})
+                    for (double sz : {0.0, b.height})
+                        consider(corner(sx, sy, sz), SnapKind::Corner);
+        }
+    }
+    if (snap_.center_enabled()) {
+        for (const auto& [id, c] : document_.cylinders()) {
+            if (!layer_visible(c.layer_id)) continue;
+            const QPointF p_bot = world_to_plane({c.position.x(), c.position.y(), c.base_z});
+            const QPointF p_top = world_to_plane({c.position.x(), c.position.y(),
+                                                   c.base_z + c.height});
+            consider(p_bot, SnapKind::Center);
+            consider(p_top, SnapKind::Center);
+        }
+    }
+
+    if (best.found()) {
+        last_snap_ = best;
+        return best.position;
+    }
+    if (snap_.grid_enabled()) {
+        const double step = snap_.grid_step();
+        const QPointF snapped{std::round(model_pos.x() / step) * step,
+                              std::round(model_pos.y() / step) * step};
+        if (std::hypot(model_pos.x() - snapped.x(),
+                       model_pos.y() - snapped.y()) < tol) {
+            last_snap_ = {snapped, SnapKind::Grid};
+            return snapped;
+        }
+    }
+    return model_pos;
+}
+
+void PlanView::draw_view_label(QPainter& p) {
+    QString title;
+    QString axes;
+    QColor accent;
+    switch (plane_) {
+        case DrawPlane::Top:
+            title = QStringLiteral("TOP  (Plan)");
+            axes  = QStringLiteral("X →   Y ↑");
+            accent = QColor(60, 130, 220);
+            break;
+        case DrawPlane::Front:
+            title = QStringLiteral("FRONT  (Elevation)");
+            axes  = QStringLiteral("X →   Z ↑");
+            accent = QColor(200, 90, 60);
+            break;
+        case DrawPlane::Right:
+            title = QStringLiteral("RIGHT  (Elevation)");
+            axes  = QStringLiteral("Y →   Z ↑");
+            accent = QColor(60, 170, 100);
+            break;
+    }
+
+    QFont title_font = p.font();
+    title_font.setPointSizeF(10.0);
+    title_font.setBold(true);
+    QFont axes_font = p.font();
+    axes_font.setPointSizeF(9.0);
+    const QFontMetrics tm(title_font);
+    const QFontMetrics am(axes_font);
+
+    const int pad = 6;
+    const int y = pad;
+    const int title_w = tm.horizontalAdvance(title);
+    const int axes_w  = am.horizontalAdvance(axes);
+    const int box_w = std::max(title_w, axes_w) + pad * 2;
+    const int box_h = tm.height() + am.height() + pad;
+
+    const QRectF bg(pad, y, box_w, box_h);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(255, 255, 255, 220));
+    p.drawRoundedRect(bg, 4, 4);
+    p.setPen(QPen(accent, 2));
+    p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(bg, 4, 4);
+
+    p.setFont(title_font);
+    p.setPen(accent);
+    p.drawText(QRectF(bg.left() + pad, bg.top() + pad / 2.0,
+                      bg.width() - pad * 2, tm.height()),
+               Qt::AlignLeft | Qt::AlignVCenter, title);
+    p.setFont(axes_font);
+    p.setPen(QColor(90, 90, 100));
+    p.drawText(QRectF(bg.left() + pad, bg.top() + pad / 2.0 + tm.height(),
+                      bg.width() - pad * 2, am.height()),
+               Qt::AlignLeft | Qt::AlignVCenter, axes);
 }
 
 void PlanView::draw_snap_marker(QPainter& p) {

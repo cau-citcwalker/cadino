@@ -22,19 +22,41 @@ void BoxTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton button
 
     const QPointF c1 = *corner1_;
     const QPointF c2 = model_pos;
-    const double w = std::abs(c2.x() - c1.x());
-    const double d = std::abs(c2.y() - c1.y());
-    if (w < 1.0 || d < 1.0) {
+    const double du = std::abs(c2.x() - c1.x());
+    const double dv = std::abs(c2.y() - c1.y());
+    if (du < 1.0 || dv < 1.0) {
         corner1_.reset();
         view.update();
         return;
     }
 
     cadino::core::Box box;
-    box.position = {(c1.x() + c2.x()) * 0.5, (c1.y() + c2.y()) * 0.5};
-    box.size_xy = {w, d};
-    box.height = default_height_;
-    box.base_z = 0.0;
+    const double mid_u = (c1.x() + c2.x()) * 0.5;
+    const double mid_v = (c1.y() + c2.y()) * 0.5;
+    const double min_v = std::min(c1.y(), c2.y());
+    switch (view.plane()) {
+        case DrawPlane::Top:
+            box.position = {mid_u, mid_v};
+            box.size_xy  = {du, dv};
+            box.height   = default_height_;
+            box.base_z   = 0.0;
+            break;
+        case DrawPlane::Front:
+            // (u, v) = (X, Z). Y=0 with a default thickness so the box has
+            // volume; the width×depth footprint is (du, default_depth).
+            box.position = {mid_u, 0.0};
+            box.size_xy  = {du, default_depth_};
+            box.height   = dv;
+            box.base_z   = min_v;
+            break;
+        case DrawPlane::Right:
+            // (u, v) = (Y, Z). X=0 with a default thickness.
+            box.position = {0.0, mid_u};
+            box.size_xy  = {default_depth_, du};
+            box.height   = dv;
+            box.base_z   = min_v;
+            break;
+    }
 
     view.command_stack().execute(
         std::make_unique<cadino::core::AddBoxCommand>(std::move(box)));

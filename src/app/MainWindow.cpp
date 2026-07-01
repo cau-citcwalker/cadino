@@ -656,9 +656,11 @@ void MainWindow::activate_wall_tool() {
 }
 
 void MainWindow::activate_box_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::BoxTool>());
+    set_tool_all_views<cadino::ui::BoxTool>();
     if (box_action_) box_action_->setChecked(true);
-    statusBar()->showMessage("Box tool — click two opposite corners (default height 750mm). Esc to cancel.");
+    statusBar()->showMessage(
+        "Box tool — click two opposite corners. In elevation views the box "
+        "gets a default depth; in plan view the height is 750mm. Esc to cancel.");
 }
 
 void MainWindow::activate_cylinder_tool() {

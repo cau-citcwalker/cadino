@@ -116,6 +116,7 @@ private:
     void draw_angular_dims(QPainter& p);
     void draw_radial_dims(QPainter& p);
     void draw_snap_marker(QPainter& p);
+    void draw_view_label(QPainter& p);
     QPointF apply_snap(QPointF model_pos);
 
     cadino::core::Document& document_;

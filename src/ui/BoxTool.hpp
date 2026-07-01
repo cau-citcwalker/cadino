@@ -22,6 +22,10 @@ private:
     std::optional<QPointF> corner1_;
     QPointF hover_;
     double default_height_{750.0};
+    // When drawing in elevation views the click plane defines two of the
+    // box's three dimensions; this fills in the axis pointing out of the
+    // plane so the box has volume.
+    double default_depth_{400.0};
 };
 
 }  // namespace cadino::ui
