@@ -1,10 +1,13 @@
 #pragma once
 
+#include <memory>
+
 #include <QMainWindow>
 #include <QString>
 
 #include "command/CommandStack.hpp"
 #include "document/Document.hpp"
+#include "PlanView.hpp"
 
 class QAction;
 class QLabel;
@@ -58,6 +61,10 @@ private:
     void activate_window_tool();
     void activate_slab_tool();
     void activate_line_tool();
+    // Set the same tool type on all three 2D views (plan + front + right
+    // elevations) so the user can draw in whichever view has focus.
+    template <typename ToolT>
+    void set_tool_all_views();
     void activate_curve_tool();
     void activate_surface_tool();
     void activate_dimension_tool();
@@ -115,8 +122,10 @@ private:
     QSplitter* bottom_row_{nullptr};
     cadino::ui::PlanView* plan_view_{nullptr};
     cadino::ui::Viewport3D* viewport_3d_{nullptr};
-    cadino::ui::Viewport3D* front_view_{nullptr};
-    cadino::ui::Viewport3D* side_view_{nullptr};
+    // Front (XZ) and Right (YZ) 2D drafting views. Used as elevation drawing
+    // surfaces in Quad and Front/Side-only modes.
+    cadino::ui::PlanView* front_view_{nullptr};
+    cadino::ui::PlanView* side_view_{nullptr};
     cadino::ui::PropertiesPanel* properties_{nullptr};
     cadino::ui::LayerPanel* layer_panel_{nullptr};
 
@@ -148,5 +157,12 @@ private:
     class QMenu* materials_menu_{nullptr};
     class QMenu* recent_menu_{nullptr};
 };
+
+template <typename ToolT>
+inline void MainWindow::set_tool_all_views() {
+    plan_view_->set_tool(std::make_unique<ToolT>());
+    if (front_view_) front_view_->set_tool(std::make_unique<ToolT>());
+    if (side_view_)  side_view_->set_tool(std::make_unique<ToolT>());
+}
 
 }  // namespace cadino::app

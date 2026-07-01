@@ -166,22 +166,39 @@ void MainWindow::build_central_widget() {
 
     plan_view_ = new cadino::ui::PlanView(document_, stack_, top_row_);
     viewport_3d_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, top_row_);
-    front_view_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, bottom_row_);
-    side_view_ = new cadino::ui::Viewport3D(document_, stack_, *plan_view_, bottom_row_);
+    front_view_ = new cadino::ui::PlanView(document_, stack_, bottom_row_);
+    side_view_ = new cadino::ui::PlanView(document_, stack_, bottom_row_);
 
-    front_view_->set_preset(cadino::ui::Viewport3D::CameraPreset::Front);
-    side_view_->set_preset(cadino::ui::Viewport3D::CameraPreset::Right);
+    front_view_->set_plane(cadino::ui::DrawPlane::Front);
+    side_view_->set_plane(cadino::ui::DrawPlane::Right);
 
-    auto refresh_all_3d = [this] {
+    auto refresh_children = [this] {
         viewport_3d_->refresh();
-        front_view_->refresh();
-        side_view_->refresh();
+        front_view_->update();
+        side_view_->update();
     };
-    connect(plan_view_, &cadino::ui::PlanView::document_modified, this, [this, refresh_all_3d] {
-        refresh_all_3d();
+    connect(plan_view_, &cadino::ui::PlanView::document_modified, this,
+            [this, refresh_children] {
+        refresh_children();
         update_undo_redo_actions();
     });
-    connect(plan_view_, &cadino::ui::PlanView::selection_changed, this, refresh_all_3d);
+    connect(plan_view_, &cadino::ui::PlanView::selection_changed, this,
+            refresh_children);
+
+    // Elevation views editing writes into the same doc; propagate back to the
+    // plan view + 3D viewport so all four stay in sync.
+    auto broadcast_from = [this](cadino::ui::PlanView* source) {
+        source->update();
+        plan_view_->update();
+        viewport_3d_->refresh();
+        if (source != front_view_ && front_view_) front_view_->update();
+        if (source != side_view_ && side_view_)   side_view_->update();
+        update_undo_redo_actions();
+    };
+    connect(front_view_, &cadino::ui::PlanView::document_modified, this,
+            [broadcast_from, this] { broadcast_from(front_view_); });
+    connect(side_view_, &cadino::ui::PlanView::document_modified, this,
+            [broadcast_from, this] { broadcast_from(side_view_); });
 
     plan_view_->setMinimumSize(200, 150);
     viewport_3d_->setMinimumSize(200, 150);
@@ -627,7 +644,7 @@ void MainWindow::build_toolbar() {
 }
 
 void MainWindow::activate_select_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::SelectTool>());
+    set_tool_all_views<cadino::ui::SelectTool>();
     if (select_action_) select_action_->setChecked(true);
     statusBar()->showMessage("Select tool — click a wall to select, drag to move");
 }
@@ -683,12 +700,12 @@ void MainWindow::activate_slab_tool() {
 }
 
 void MainWindow::activate_line_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::LineTool>());
+    set_tool_all_views<cadino::ui::LineTool>();
     if (line_action_) line_action_->setChecked(true);
     plan_view_->setFocus();
     statusBar()->showMessage(
-        "Line — click points; type a number then Enter for direct distance; "
-        "Shift toggles ortho; right-click or Enter to finish (Esc cancels)");
+        "Line — click points in any 2D view; type a number then Enter for "
+        "direct distance; Shift=ortho; right-click or Enter to finish (Esc cancels)");
 }
 
 void MainWindow::activate_dimension_tool() {
@@ -1219,8 +1236,6 @@ void MainWindow::show_sun_dialog() {
     const float a = static_cast<float>(az->value());
     const float t = static_cast<float>(al->value());
     viewport_3d_->set_sun(a, t);
-    if (front_view_) front_view_->set_sun(a, t);
-    if (side_view_)  side_view_->set_sun(a, t);
     statusBar()->showMessage(
         QString("Sun: azimuth %1°, altitude %2°").arg(a, 0, 'f', 1).arg(t, 0, 'f', 1));
 }
@@ -1228,8 +1243,6 @@ void MainWindow::show_sun_dialog() {
 void MainWindow::set_section_axis(int axis, double position) {
     if (axis < 0) {
         viewport_3d_->set_section(false, {0, 0, 1}, {0, 0, 0});
-        if (front_view_) front_view_->set_section(false, {0, 0, 1}, {0, 0, 0});
-        if (side_view_)  side_view_->set_section(false, {0, 0, 1}, {0, 0, 0});
         statusBar()->showMessage("Section: off");
         return;
     }
@@ -1242,8 +1255,6 @@ void MainWindow::set_section_axis(int axis, double position) {
         default: return;
     }
     viewport_3d_->set_section(true, normal, point);
-    if (front_view_) front_view_->set_section(true, normal, point);
-    if (side_view_)  side_view_->set_section(true, normal, point);
     statusBar()->showMessage(
         QString("Section: axis %1 at %2 mm")
             .arg(axis == 0 ? "X" : axis == 1 ? "Y" : "Z")

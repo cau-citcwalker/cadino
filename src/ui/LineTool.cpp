@@ -145,7 +145,7 @@ void LineTool::finish(PlanView& view) {
     curve.degree = 1;
     curve.control_points.reserve(anchors_.size());
     for (const QPointF& pt : anchors_) {
-        curve.control_points.emplace_back(pt.x(), pt.y(), 0.0);
+        curve.control_points.push_back(view.plane_to_world(pt));
     }
     view.command_stack().execute(
         std::make_unique<cadino::core::AddNurbsCurveCommand>(std::move(curve)));

@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include <Eigen/Core>
 #include <QPointF>
 #include <QTransform>
 #include <QWidget>
@@ -19,6 +20,14 @@ namespace cadino::ui {
 
 class Tool;
 
+// Which world plane this 2D view represents.
+//   Top    — draws the XY plane (u=X, v=Y). This is the classic plan view.
+//   Front  — draws the XZ plane (u=X, v=Z, +v = up in world Z).
+//   Right  — draws the YZ plane (u=Y, v=Z, +v = up in world Z).
+// Elevation views (Front/Right) let users draw at Z != 0 so 3D content can
+// be authored from any side.
+enum class DrawPlane { Top, Front, Right };
+
 class PlanView : public QWidget {
     Q_OBJECT
 
@@ -26,6 +35,17 @@ public:
     PlanView(cadino::core::Document& doc, cadino::core::CommandStack& stack,
              QWidget* parent = nullptr);
     ~PlanView() override;
+
+    void set_plane(DrawPlane p) noexcept { plane_ = p; }
+    [[nodiscard]] DrawPlane plane() const noexcept { return plane_; }
+
+    // Map a plane-local (u, v) point to a world-space (X, Y, Z) coordinate.
+    //   Top    (u, v) -> (u, v, 0)
+    //   Front  (u, v) -> (u, 0, v)
+    //   Right  (u, v) -> (0, u, v)
+    [[nodiscard]] Eigen::Vector3d plane_to_world(QPointF uv) const noexcept;
+    // Inverse: project a world point onto this plane's (u, v).
+    [[nodiscard]] QPointF world_to_plane(Eigen::Vector3d w) const noexcept;
 
     void set_tool(std::unique_ptr<Tool> tool);
     [[nodiscard]] Tool* tool() noexcept { return tool_.get(); }
@@ -115,6 +135,7 @@ private:
     SnapEngine snap_;
     SnapResult last_snap_{};
     bool ortho_enabled_{false};
+    DrawPlane plane_{DrawPlane::Top};
 };
 
 }  // namespace cadino::ui

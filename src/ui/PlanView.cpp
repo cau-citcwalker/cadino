@@ -94,6 +94,24 @@ QPointF PlanView::model_to_screen(QPointF model) const {
     return model_to_screen_.map(model);
 }
 
+Eigen::Vector3d PlanView::plane_to_world(QPointF uv) const noexcept {
+    switch (plane_) {
+        case DrawPlane::Top:   return {uv.x(), uv.y(), 0.0};
+        case DrawPlane::Front: return {uv.x(), 0.0, uv.y()};
+        case DrawPlane::Right: return {0.0, uv.x(), uv.y()};
+    }
+    return {uv.x(), uv.y(), 0.0};
+}
+
+QPointF PlanView::world_to_plane(Eigen::Vector3d w) const noexcept {
+    switch (plane_) {
+        case DrawPlane::Top:   return {w.x(), w.y()};
+        case DrawPlane::Front: return {w.x(), w.z()};
+        case DrawPlane::Right: return {w.y(), w.z()};
+    }
+    return {w.x(), w.y()};
+}
+
 void PlanView::update_transform() {
     QTransform t;
     t.translate(view_offset_.x() + width() / 2.0, view_offset_.y() + height() / 2.0);
@@ -229,10 +247,23 @@ void PlanView::draw_cylinders(QPainter& p) {
     for (const auto& [id, c] : document_.cylinders()) {
         if (!layer_visible(c.layer_id)) continue;
         p.setBrush(QColor::fromRgbF(c.color.r, c.color.g, c.color.b, 0.55f));
-        const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
-        const double r_s = c.radius * zoom_;
-        p.drawEllipse(center_s, r_s, r_s);
-        p.drawPoint(center_s);
+        if (plane_ == DrawPlane::Top) {
+            const QPointF center_s = model_to_screen({c.position.x(), c.position.y()});
+            const double r_s = c.radius * zoom_;
+            p.drawEllipse(center_s, r_s, r_s);
+            p.drawPoint(center_s);
+        } else {
+            // Elevation: cylinder appears as a rectangle of width 2r and
+            // height `height` starting at base_z.
+            const double u_center = (plane_ == DrawPlane::Front)
+                ? c.position.x() : c.position.y();
+            QPolygonF poly;
+            poly << model_to_screen({u_center - c.radius, c.base_z})
+                 << model_to_screen({u_center + c.radius, c.base_z})
+                 << model_to_screen({u_center + c.radius, c.base_z + c.height})
+                 << model_to_screen({u_center - c.radius, c.base_z + c.height});
+            p.drawPolygon(poly);
+        }
     }
 }
 
@@ -249,6 +280,22 @@ bool PlanView::layer_locked(cadino::core::EntityId layer_id) const {
 }
 
 QPointF PlanView::apply_snap(QPointF model_pos) {
+    if (plane_ != DrawPlane::Top) {
+        // Elevation views: entity-based snap points live in the XY plane and
+        // don't project cleanly here. Snap to the plane's grid only.
+        last_snap_ = {};
+        if (snap_.grid_enabled()) {
+            const double step = snap_.grid_step();
+            const QPointF snapped{std::round(model_pos.x() / step) * step,
+                                  std::round(model_pos.y() / step) * step};
+            if (std::hypot(model_pos.x() - snapped.x(),
+                           model_pos.y() - snapped.y()) < 12.0 / zoom_) {
+                last_snap_ = {snapped, SnapKind::Grid};
+                return snapped;
+            }
+        }
+        return model_pos;
+    }
     const double tol = 12.0 / zoom_;
     last_snap_ = snap_.snap(model_pos, document_, tol);
     return last_snap_.found() ? last_snap_.position : model_pos;
@@ -391,27 +438,44 @@ void PlanView::draw_walls(QPainter& p) {
     for (const auto& [id, w] : document_.walls()) {
         if (!layer_visible(w.layer_id)) continue;
         p.setBrush(QColor::fromRgbF(w.color.r, w.color.g, w.color.b, 0.55f));
-        const QPointF start_m{w.start.x(), w.start.y()};
-        const QPointF end_m{w.end.x(), w.end.y()};
 
-        const QPointF dir = end_m - start_m;
-        const double len = std::hypot(dir.x(), dir.y());
-        if (len < 1e-6) continue;
+        if (plane_ == DrawPlane::Top) {
+            const QPointF start_m{w.start.x(), w.start.y()};
+            const QPointF end_m{w.end.x(), w.end.y()};
 
-        const QPointF unit = dir / len;
-        const QPointF normal(-unit.y(), unit.x());
-        const double half = w.thickness * 0.5;
-        const QPointF off = normal * half;
+            const QPointF dir = end_m - start_m;
+            const double len = std::hypot(dir.x(), dir.y());
+            if (len < 1e-6) continue;
 
-        const QPointF p1 = start_m + off;
-        const QPointF p2 = end_m + off;
-        const QPointF p3 = end_m - off;
-        const QPointF p4 = start_m - off;
+            const QPointF unit = dir / len;
+            const QPointF normal(-unit.y(), unit.x());
+            const double half = w.thickness * 0.5;
+            const QPointF off = normal * half;
 
-        QPolygonF poly;
-        poly << model_to_screen(p1) << model_to_screen(p2)
-             << model_to_screen(p3) << model_to_screen(p4);
-        p.drawPolygon(poly);
+            QPolygonF poly;
+            poly << model_to_screen(start_m + off)
+                 << model_to_screen(end_m + off)
+                 << model_to_screen(end_m - off)
+                 << model_to_screen(start_m - off);
+            p.drawPolygon(poly);
+        } else {
+            // Elevation views: project the wall footprint's extent onto the
+            // horizontal axis of this plane, stretched vertically from 0 to h.
+            double u0, u1;
+            if (plane_ == DrawPlane::Front) {
+                u0 = std::min(w.start.x(), w.end.x());
+                u1 = std::max(w.start.x(), w.end.x());
+            } else {
+                u0 = std::min(w.start.y(), w.end.y());
+                u1 = std::max(w.start.y(), w.end.y());
+            }
+            QPolygonF poly;
+            poly << model_to_screen({u0, 0.0})
+                 << model_to_screen({u1, 0.0})
+                 << model_to_screen({u1, w.height})
+                 << model_to_screen({u0, w.height});
+            p.drawPolygon(poly);
+        }
     }
 }
 
@@ -609,8 +673,8 @@ void PlanView::draw_curves(QPainter& p) {
         p.setBrush(Qt::NoBrush);
 
         for (std::size_t i = 1; i < samples.size(); ++i) {
-            const QPointF a = model_to_screen({samples[i - 1].x(), samples[i - 1].y()});
-            const QPointF b = model_to_screen({samples[i].x(), samples[i].y()});
+            const QPointF a = model_to_screen(world_to_plane(samples[i - 1]));
+            const QPointF b = model_to_screen(world_to_plane(samples[i]));
             p.drawLine(a, b);
         }
 
@@ -619,16 +683,14 @@ void PlanView::draw_curves(QPainter& p) {
             poly_pen.setCosmetic(true);
             p.setPen(poly_pen);
             for (std::size_t i = 1; i < curve.control_points.size(); ++i) {
-                const QPointF a = model_to_screen(
-                    {curve.control_points[i - 1].x(), curve.control_points[i - 1].y()});
-                const QPointF b = model_to_screen(
-                    {curve.control_points[i].x(), curve.control_points[i].y()});
+                const QPointF a = model_to_screen(world_to_plane(curve.control_points[i - 1]));
+                const QPointF b = model_to_screen(world_to_plane(curve.control_points[i]));
                 p.drawLine(a, b);
             }
             p.setBrush(QColor(80, 220, 240));
             p.setPen(Qt::NoPen);
             for (const auto& cp : curve.control_points) {
-                p.drawEllipse(model_to_screen({cp.x(), cp.y()}), 4, 4);
+                p.drawEllipse(model_to_screen(world_to_plane(cp)), 4, 4);
             }
         }
     }
@@ -643,28 +705,45 @@ void PlanView::draw_boxes(QPainter& p) {
     for (const auto& [id, b] : document_.boxes()) {
         if (!layer_visible(b.layer_id)) continue;
         p.setBrush(QColor::fromRgbF(b.color.r, b.color.g, b.color.b, 0.55f));
-        const double hx = b.size_xy.x() * 0.5;
-        const double hy = b.size_xy.y() * 0.5;
-        const double c = std::cos(b.rotation_z);
-        const double s = std::sin(b.rotation_z);
-        const auto rot = [&](double x, double y) {
-            return QPointF(b.position.x() + c * x - s * y,
-                           b.position.y() + s * x + c * y);
-        };
 
-        QPolygonF poly;
-        poly << model_to_screen(rot(-hx, -hy))
-             << model_to_screen(rot( hx, -hy))
-             << model_to_screen(rot( hx,  hy))
-             << model_to_screen(rot(-hx,  hy));
-        p.drawPolygon(poly);
+        if (plane_ == DrawPlane::Top) {
+            const double hx = b.size_xy.x() * 0.5;
+            const double hy = b.size_xy.y() * 0.5;
+            const double c = std::cos(b.rotation_z);
+            const double s = std::sin(b.rotation_z);
+            const auto rot = [&](double x, double y) {
+                return QPointF(b.position.x() + c * x - s * y,
+                               b.position.y() + s * x + c * y);
+            };
 
-        QPen dir_pen(QColor(120, 80, 40, 200), 1);
-        dir_pen.setCosmetic(true);
-        p.setPen(dir_pen);
-        p.drawLine(model_to_screen({b.position.x(), b.position.y()}),
-                   model_to_screen(rot(hx, 0.0)));
-        p.setPen(box_pen);
+            QPolygonF poly;
+            poly << model_to_screen(rot(-hx, -hy))
+                 << model_to_screen(rot( hx, -hy))
+                 << model_to_screen(rot( hx,  hy))
+                 << model_to_screen(rot(-hx,  hy));
+            p.drawPolygon(poly);
+
+            QPen dir_pen(QColor(120, 80, 40, 200), 1);
+            dir_pen.setCosmetic(true);
+            p.setPen(dir_pen);
+            p.drawLine(model_to_screen({b.position.x(), b.position.y()}),
+                       model_to_screen(rot(hx, 0.0)));
+            p.setPen(box_pen);
+        } else {
+            // Elevation projection — axis-aligned rectangle at (u_center ± half, z0..z1).
+            const double u_center = (plane_ == DrawPlane::Front)
+                ? b.position.x() : b.position.y();
+            const double half = 0.5 * ((plane_ == DrawPlane::Front)
+                ? b.size_xy.x() : b.size_xy.y());
+            const double z0 = b.base_z;
+            const double z1 = b.base_z + b.height;
+            QPolygonF poly;
+            poly << model_to_screen({u_center - half, z0})
+                 << model_to_screen({u_center + half, z0})
+                 << model_to_screen({u_center + half, z1})
+                 << model_to_screen({u_center - half, z1});
+            p.drawPolygon(poly);
+        }
     }
 }
 
