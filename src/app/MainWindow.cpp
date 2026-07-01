@@ -664,9 +664,11 @@ void MainWindow::activate_box_tool() {
 }
 
 void MainWindow::activate_cylinder_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::CylinderTool>());
+    set_tool_all_views<cadino::ui::CylinderTool>();
     if (cylinder_action_) cylinder_action_->setChecked(true);
-    statusBar()->showMessage("Cylinder tool — click center then radius (default height 750mm). Esc to cancel.");
+    statusBar()->showMessage(
+        "Cylinder — in plan: click center then radius. In elevation: two "
+        "clicks define the silhouette rectangle (⌀ × H). Esc to cancel.");
 }
 
 void MainWindow::activate_door_tool() {
@@ -711,10 +713,11 @@ void MainWindow::activate_line_tool() {
 }
 
 void MainWindow::activate_dimension_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::DimensionTool>());
+    set_tool_all_views<cadino::ui::DimensionTool>();
     if (dimension_action_) dimension_action_->setChecked(true);
     statusBar()->showMessage(
-        "Dimension tool — click two endpoints, then click to position the dimension line (Esc cancels)");
+        "Dimension tool — click two endpoints, then click to position the "
+        "dimension line. Works in each 2D view (annotations live in their plane). Esc cancels.");
 }
 
 void MainWindow::activate_text_tool() {
@@ -722,7 +725,9 @@ void MainWindow::activate_text_tool() {
     const QString text = QInputDialog::getText(
         this, "Text", "Text:", QLineEdit::Normal, "Text", &ok);
     if (!ok || text.isEmpty()) return;
-    plan_view_->set_tool(std::make_unique<cadino::ui::TextTool>(text));
+    set_tool_factory_all_views([&text] {
+        return std::make_unique<cadino::ui::TextTool>(text);
+    });
     statusBar()->showMessage("Text — click to place the label (Esc cancels)");
 }
 
@@ -731,13 +736,15 @@ void MainWindow::activate_leader_tool() {
     const QString text = QInputDialog::getText(
         this, "Leader", "Callout text:", QLineEdit::Normal, "Note", &ok);
     if (!ok || text.isEmpty()) return;
-    plan_view_->set_tool(std::make_unique<cadino::ui::LeaderTool>(text));
+    set_tool_factory_all_views([&text] {
+        return std::make_unique<cadino::ui::LeaderTool>(text);
+    });
     statusBar()->showMessage(
         "Leader — click the anchor, then click where the text goes (Esc cancels)");
 }
 
 void MainWindow::activate_angular_dim_tool() {
-    plan_view_->set_tool(std::make_unique<cadino::ui::AngularDimensionTool>());
+    set_tool_all_views<cadino::ui::AngularDimensionTool>();
     statusBar()->showMessage(
         "Angular dim — click the vertex, then a point on each arm (Esc cancels)");
 }
@@ -745,7 +752,9 @@ void MainWindow::activate_angular_dim_tool() {
 void MainWindow::activate_radial_dim_tool() {
     const auto modifiers = QApplication::keyboardModifiers();
     const bool diameter = (modifiers & Qt::ShiftModifier) != 0;
-    plan_view_->set_tool(std::make_unique<cadino::ui::RadialDimensionTool>(diameter));
+    set_tool_factory_all_views([diameter] {
+        return std::make_unique<cadino::ui::RadialDimensionTool>(diameter);
+    });
     statusBar()->showMessage(
         diameter
             ? "Diameter — click a cylinder, then click where the label goes"

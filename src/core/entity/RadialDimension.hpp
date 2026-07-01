@@ -19,6 +19,7 @@ struct RadialDimension {
     Eigen::Vector2d center{0.0, 0.0};
     double radius{500.0};
     Eigen::Vector2d label_position{0.0, 0.0};
+    int plane{0};  // 0=Top, 1=Front, 2=Right
     bool is_diameter{false};
     double text_height{120.0};
     double arrow_size{60.0};

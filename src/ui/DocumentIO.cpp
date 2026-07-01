@@ -498,6 +498,7 @@ QJsonObject to_json(const cadino::core::Dimension& d) {
     o["layer_id"] = qint64(d.layer_id.value);
     o["start"] = vec2_array(d.start.x(), d.start.y());
     o["end"] = vec2_array(d.end.x(), d.end.y());
+    o["plane"] = d.plane;
     o["offset"] = d.offset;
     o["text_override"] = QString::fromStdString(d.text_override);
     o["color"] = color_array(d.color);
@@ -514,6 +515,7 @@ QJsonObject to_json(const cadino::core::RadialDimension& r) {
     o["center"] = vec2_array(r.center.x(), r.center.y());
     o["radius"] = r.radius;
     o["label_position"] = vec2_array(r.label_position.x(), r.label_position.y());
+    o["plane"] = r.plane;
     o["is_diameter"] = r.is_diameter;
     o["text_height"] = r.text_height;
     o["arrow_size"] = r.arrow_size;
@@ -531,6 +533,7 @@ cadino::core::RadialDimension radial_dim_from(const QJsonObject& o) {
     const auto lp = o["label_position"].toArray();
     if (c.size() >= 2) r.center = {c[0].toDouble(), c[1].toDouble()};
     if (lp.size() >= 2) r.label_position = {lp[0].toDouble(), lp[1].toDouble()};
+    r.plane = o["plane"].toInt(r.plane);
     r.radius = o["radius"].toDouble(r.radius);
     r.is_diameter = o["is_diameter"].toBool(r.is_diameter);
     r.text_height = o["text_height"].toDouble(r.text_height);
@@ -548,6 +551,7 @@ QJsonObject to_json(const cadino::core::AngularDimension& a) {
     o["vertex"] = vec2_array(a.vertex.x(), a.vertex.y());
     o["p1"] = vec2_array(a.p1.x(), a.p1.y());
     o["p2"] = vec2_array(a.p2.x(), a.p2.y());
+    o["plane"] = a.plane;
     o["radius"] = a.radius;
     o["text_height"] = a.text_height;
     o["arrow_size"] = a.arrow_size;
@@ -567,6 +571,7 @@ cadino::core::AngularDimension angular_dim_from(const QJsonObject& o) {
     if (v.size() >= 2) a.vertex = {v[0].toDouble(), v[1].toDouble()};
     if (p1.size() >= 2) a.p1 = {p1[0].toDouble(), p1[1].toDouble()};
     if (p2.size() >= 2) a.p2 = {p2[0].toDouble(), p2[1].toDouble()};
+    a.plane = o["plane"].toInt(a.plane);
     a.radius = o["radius"].toDouble(a.radius);
     a.text_height = o["text_height"].toDouble(a.text_height);
     a.arrow_size = o["arrow_size"].toDouble(a.arrow_size);
@@ -582,6 +587,7 @@ QJsonObject to_json(const cadino::core::Leader& l) {
     o["layer_id"] = qint64(l.layer_id.value);
     o["anchor"] = vec2_array(l.anchor.x(), l.anchor.y());
     o["text_position"] = vec2_array(l.text_position.x(), l.text_position.y());
+    o["plane"] = l.plane;
     o["text"] = QString::fromStdString(l.text);
     o["height"] = l.height;
     o["arrow_size"] = l.arrow_size;
@@ -598,6 +604,7 @@ cadino::core::Leader leader_from(const QJsonObject& o) {
     const auto t = o["text_position"].toArray();
     if (a.size() >= 2) l.anchor = {a[0].toDouble(), a[1].toDouble()};
     if (t.size() >= 2) l.text_position = {t[0].toDouble(), t[1].toDouble()};
+    l.plane = o["plane"].toInt(l.plane);
     l.text = o["text"].toString().toStdString();
     l.height = o["height"].toDouble(l.height);
     l.arrow_size = o["arrow_size"].toDouble(l.arrow_size);
@@ -611,6 +618,7 @@ QJsonObject to_json(const cadino::core::TextAnnotation& t) {
     o["group_id"] = qint64(t.group_id.value);
     o["layer_id"] = qint64(t.layer_id.value);
     o["position"] = vec2_array(t.position.x(), t.position.y());
+    o["plane"] = t.plane;
     o["text"] = QString::fromStdString(t.text);
     o["height"] = t.height;
     o["rotation_z"] = t.rotation_z;
@@ -625,6 +633,7 @@ cadino::core::TextAnnotation text_from(const QJsonObject& o) {
     t.layer_id = cadino::core::EntityId{static_cast<std::uint64_t>(o["layer_id"].toVariant().toULongLong())};
     const auto p = o["position"].toArray();
     if (p.size() >= 2) t.position = {p[0].toDouble(), p[1].toDouble()};
+    t.plane = o["plane"].toInt(t.plane);
     t.text = o["text"].toString().toStdString();
     t.height = o["height"].toDouble(t.height);
     t.rotation_z = o["rotation_z"].toDouble(t.rotation_z);
@@ -641,6 +650,7 @@ cadino::core::Dimension dimension_from(const QJsonObject& o) {
     const auto e = o["end"].toArray();
     if (s.size() >= 2) d.start = {s[0].toDouble(), s[1].toDouble()};
     if (e.size() >= 2) d.end = {e[0].toDouble(), e[1].toDouble()};
+    d.plane = o["plane"].toInt(d.plane);
     d.offset = o["offset"].toDouble(d.offset);
     d.text_override = o["text_override"].toString().toStdString();
     if (o.contains("color")) d.color = color_from(o["color"].toArray());

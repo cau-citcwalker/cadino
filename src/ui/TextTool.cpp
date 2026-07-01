@@ -14,6 +14,7 @@ void TextTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton butto
     t.position = {model_pos.x(), model_pos.y()};
     t.text = text_.toStdString();
     t.height = height_;
+    t.plane = static_cast<int>(view.plane());
     view.command_stack().execute(
         std::make_unique<cadino::core::AddTextAnnotationCommand>(std::move(t)));
     view.notify_document_modified();

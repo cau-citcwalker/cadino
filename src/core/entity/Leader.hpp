@@ -17,6 +17,7 @@ struct Leader {
     EntityId layer_id{};
     Eigen::Vector2d anchor{0.0, 0.0};
     Eigen::Vector2d text_position{0.0, 0.0};
+    int plane{0};  // 0=Top, 1=Front, 2=Right — see Dimension for details
     std::string text{"Note"};
     double height{120.0};
     double arrow_size{80.0};

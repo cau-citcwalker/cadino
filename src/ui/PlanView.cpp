@@ -138,20 +138,21 @@ void PlanView::paintEvent(QPaintEvent*) {
     draw_boxes(p);
     draw_cylinders(p);
     draw_walls(p);
+    draw_doors_windows(p);
     if (plane_ == DrawPlane::Top) {
-        // These entity types are 2D-in-XY and only meaningful in the plan view
-        // for now (they don't yet carry a plane tag).
-        draw_doors_windows(p);
+        // Blocks / block instances / surfaces are 2D-in-XY and don't yet
+        // carry a plane tag — only render in the plan view.
         draw_blocks(p);
         draw_block_instances(p);
         draw_surfaces(p);
-        draw_dimensions(p);
-        draw_texts(p);
-        draw_leaders(p);
-        draw_angular_dims(p);
-        draw_radial_dims(p);
     }
     draw_curves(p);
+    // Annotations carry their own plane tag; each draw function filters.
+    draw_dimensions(p);
+    draw_texts(p);
+    draw_leaders(p);
+    draw_angular_dims(p);
+    draw_radial_dims(p);
     if (tool_) {
         tool_->paint_overlay(p, *this);
     }
@@ -166,6 +167,31 @@ void PlanView::draw_slabs(QPainter& p) {
     for (const auto& [id, s] : document_.slabs()) {
         if (!layer_visible(s.layer_id)) continue;
         if (s.outline.size() < 3) continue;
+
+        if (plane_ != DrawPlane::Top) {
+            // Elevation: slab appears as a horizontal band from
+            // (level - thickness, level) across its u-axis extent.
+            double u_min = std::numeric_limits<double>::infinity();
+            double u_max = -std::numeric_limits<double>::infinity();
+            for (const auto& v : s.outline) {
+                const double u = (plane_ == DrawPlane::Front) ? v.x() : v.y();
+                u_min = std::min(u_min, u);
+                u_max = std::max(u_max, u);
+            }
+            const double z_top = s.level;
+            const double z_bot = s.level - s.thickness;
+            QPolygonF stripe;
+            stripe << model_to_screen({u_min, z_bot})
+                   << model_to_screen({u_max, z_bot})
+                   << model_to_screen({u_max, z_top})
+                   << model_to_screen({u_min, z_top});
+            p.setPen(border);
+            p.setBrush(QColor::fromRgbF(s.hatch_color.r,
+                                         s.hatch_color.g,
+                                         s.hatch_color.b, 0.35f));
+            p.drawPolygon(stripe);
+            continue;
+        }
         QPolygonF poly;
         for (const auto& v : s.outline) {
             poly << model_to_screen({v.x(), v.y()});
@@ -203,22 +229,44 @@ void PlanView::draw_doors_windows(QPainter& p) {
         const QPointF center = a + unit * d.position_along;
         const QPointF p1 = center - unit * (d.width * 0.5);
         const QPointF p2 = center + unit * (d.width * 0.5);
-        const QPointF hinge = p1;
-        const QPointF swing_end = hinge + normal * d.width;
 
-        QPen pen(QColor(220, 130, 60), 2);
-        pen.setCosmetic(true);
-        p.setPen(pen);
-        p.setBrush(Qt::white);
-        p.drawLine(model_to_screen(p1), model_to_screen(p2));
-        QPen arc_pen(QColor(220, 130, 60, 180), 1, Qt::DashLine);
-        arc_pen.setCosmetic(true);
-        p.setPen(arc_pen);
-        const QPointF hinge_s = model_to_screen(hinge);
-        const QPointF tip_s = model_to_screen(swing_end);
-        const double r_s = std::hypot(tip_s.x() - hinge_s.x(), tip_s.y() - hinge_s.y());
-        p.drawArc(QRectF(hinge_s.x() - r_s, hinge_s.y() - r_s, 2 * r_s, 2 * r_s),
-                  0, 90 * 16);
+        if (plane_ == DrawPlane::Top) {
+            const QPointF hinge = p1;
+            const QPointF swing_end = hinge + normal * d.width;
+
+            QPen pen(QColor(220, 130, 60), 2);
+            pen.setCosmetic(true);
+            p.setPen(pen);
+            p.setBrush(Qt::white);
+            p.drawLine(model_to_screen(p1), model_to_screen(p2));
+            QPen arc_pen(QColor(220, 130, 60, 180), 1, Qt::DashLine);
+            arc_pen.setCosmetic(true);
+            p.setPen(arc_pen);
+            const QPointF hinge_s = model_to_screen(hinge);
+            const QPointF tip_s = model_to_screen(swing_end);
+            const double r_s = std::hypot(tip_s.x() - hinge_s.x(),
+                                          tip_s.y() - hinge_s.y());
+            p.drawArc(QRectF(hinge_s.x() - r_s, hinge_s.y() - r_s, 2 * r_s, 2 * r_s),
+                      0, 90 * 16);
+        } else {
+            // Elevation: door opening as a rectangle carved out of the wall
+            // silhouette. Height 2100mm from floor is a sensible default.
+            const double door_h = std::min<double>(2100.0, w->height);
+            const double u0 = (plane_ == DrawPlane::Front)
+                ? std::min(p1.x(), p2.x()) : std::min(p1.y(), p2.y());
+            const double u1 = (plane_ == DrawPlane::Front)
+                ? std::max(p1.x(), p2.x()) : std::max(p1.y(), p2.y());
+            QPen pen(QColor(220, 130, 60), 2);
+            pen.setCosmetic(true);
+            p.setPen(pen);
+            p.setBrush(QColor(255, 255, 255, 200));
+            QPolygonF poly;
+            poly << model_to_screen({u0, 0.0})
+                 << model_to_screen({u1, 0.0})
+                 << model_to_screen({u1, door_h})
+                 << model_to_screen({u0, door_h});
+            p.drawPolygon(poly);
+        }
     }
 
     for (const auto& [id, win] : document_.windows()) {
@@ -233,13 +281,37 @@ void PlanView::draw_doors_windows(QPainter& p) {
         const QPointF center = a + unit * win.position_along;
         const QPointF p1 = center - unit * (win.width * 0.5);
         const QPointF p2 = center + unit * (win.width * 0.5);
-        const QPointF off = normal * (w->thickness * 0.5);
-        QPen pen(QColor(80, 150, 200), 2);
-        pen.setCosmetic(true);
-        p.setPen(pen);
-        p.drawLine(model_to_screen(p1 + off), model_to_screen(p2 + off));
-        p.drawLine(model_to_screen(p1 - off), model_to_screen(p2 - off));
-        p.drawLine(model_to_screen(p1), model_to_screen(p2));
+
+        if (plane_ == DrawPlane::Top) {
+            const QPointF off = normal * (w->thickness * 0.5);
+            QPen pen(QColor(80, 150, 200), 2);
+            pen.setCosmetic(true);
+            p.setPen(pen);
+            p.drawLine(model_to_screen(p1 + off), model_to_screen(p2 + off));
+            p.drawLine(model_to_screen(p1 - off), model_to_screen(p2 - off));
+            p.drawLine(model_to_screen(p1), model_to_screen(p2));
+        } else {
+            // Elevation: window opening at typical sill/lintel heights.
+            const double sill = 900.0;
+            const double head = std::min<double>(sill + 1200.0, w->height);
+            const double u0 = (plane_ == DrawPlane::Front)
+                ? std::min(p1.x(), p2.x()) : std::min(p1.y(), p2.y());
+            const double u1 = (plane_ == DrawPlane::Front)
+                ? std::max(p1.x(), p2.x()) : std::max(p1.y(), p2.y());
+            QPen pen(QColor(80, 150, 200), 2);
+            pen.setCosmetic(true);
+            p.setPen(pen);
+            p.setBrush(QColor(180, 220, 245, 180));
+            QPolygonF poly;
+            poly << model_to_screen({u0, sill})
+                 << model_to_screen({u1, sill})
+                 << model_to_screen({u1, head})
+                 << model_to_screen({u0, head});
+            p.drawPolygon(poly);
+            const QPointF mid_bot = model_to_screen({(u0 + u1) * 0.5, sill});
+            const QPointF mid_top = model_to_screen({(u0 + u1) * 0.5, head});
+            p.drawLine(mid_bot, mid_top);
+        }
     }
 }
 
@@ -880,6 +952,7 @@ void PlanView::draw_boxes(QPainter& p) {
 void PlanView::draw_dimensions(QPainter& p) {
     for (const auto& [id, d] : document_.dimensions()) {
         if (!layer_visible(d.layer_id)) continue;
+        if (d.plane != static_cast<int>(plane_)) continue;
         const Eigen::Vector2d v = d.end - d.start;
         const double len = v.norm();
         if (len < 1e-6) continue;
@@ -958,6 +1031,7 @@ void PlanView::draw_dimensions(QPainter& p) {
 void PlanView::draw_radial_dims(QPainter& p) {
     for (const auto& [id, rd] : document_.radial_dims()) {
         if (!layer_visible(rd.layer_id)) continue;
+        if (rd.plane != static_cast<int>(plane_)) continue;
 
         QPen pen(QColor::fromRgbF(rd.color.r, rd.color.g, rd.color.b), 1.5);
         pen.setCosmetic(true);
@@ -985,6 +1059,7 @@ void PlanView::draw_radial_dims(QPainter& p) {
 void PlanView::draw_angular_dims(QPainter& p) {
     for (const auto& [id, ad] : document_.angular_dims()) {
         if (!layer_visible(ad.layer_id)) continue;
+        if (ad.plane != static_cast<int>(plane_)) continue;
 
         const double a1 = std::atan2(ad.p1.y() - ad.vertex.y(),
                                      ad.p1.x() - ad.vertex.x());
@@ -1038,6 +1113,7 @@ void PlanView::draw_angular_dims(QPainter& p) {
 void PlanView::draw_leaders(QPainter& p) {
     for (const auto& [id, l] : document_.leaders()) {
         if (!layer_visible(l.layer_id)) continue;
+        if (l.plane != static_cast<int>(plane_)) continue;
         const QPointF a = model_to_screen({l.anchor.x(), l.anchor.y()});
         const QPointF b = model_to_screen({l.text_position.x(), l.text_position.y()});
 
@@ -1077,6 +1153,7 @@ void PlanView::draw_leaders(QPainter& p) {
 void PlanView::draw_texts(QPainter& p) {
     for (const auto& [id, t] : document_.texts()) {
         if (!layer_visible(t.layer_id)) continue;
+        if (t.plane != static_cast<int>(plane_)) continue;
         const QPointF anchor = model_to_screen({t.position.x(), t.position.y()});
 
         QFont font = p.font();

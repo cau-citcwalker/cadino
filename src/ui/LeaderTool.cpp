@@ -21,6 +21,7 @@ void LeaderTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton but
     l.text_position = {model_pos.x(), model_pos.y()};
     l.text = text_.toStdString();
     l.height = height_;
+    l.plane = static_cast<int>(view.plane());
     view.command_stack().execute(
         std::make_unique<cadino::core::AddLeaderCommand>(std::move(l)));
     anchor_.reset();

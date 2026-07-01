@@ -65,6 +65,11 @@ private:
     // elevations) so the user can draw in whichever view has focus.
     template <typename ToolT>
     void set_tool_all_views();
+    // Same, but takes a factory for tools that need constructor arguments
+    // (Text/Leader/Radial dim etc). Called once per view so the results are
+    // independent instances.
+    template <typename Factory>
+    void set_tool_factory_all_views(Factory&& make);
     void activate_curve_tool();
     void activate_surface_tool();
     void activate_dimension_tool();
@@ -163,6 +168,13 @@ inline void MainWindow::set_tool_all_views() {
     plan_view_->set_tool(std::make_unique<ToolT>());
     if (front_view_) front_view_->set_tool(std::make_unique<ToolT>());
     if (side_view_)  side_view_->set_tool(std::make_unique<ToolT>());
+}
+
+template <typename Factory>
+inline void MainWindow::set_tool_factory_all_views(Factory&& make) {
+    plan_view_->set_tool(make());
+    if (front_view_) front_view_->set_tool(make());
+    if (side_view_)  side_view_->set_tool(make());
 }
 
 }  // namespace cadino::app

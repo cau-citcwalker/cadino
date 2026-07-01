@@ -33,6 +33,7 @@ void RadialDimensionTool::on_press(PlanView& view, QPointF model_pos,
     r.center = {target_center_.x(), target_center_.y()};
     r.radius = target_radius_;
     r.label_position = {model_pos.x(), model_pos.y()};
+    r.plane = static_cast<int>(view.plane());
     r.is_diameter = diameter_;
     view.command_stack().execute(
         std::make_unique<cadino::core::AddRadialDimensionCommand>(std::move(r)));

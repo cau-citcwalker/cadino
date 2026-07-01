@@ -19,6 +19,7 @@ struct AngularDimension {
     Eigen::Vector2d vertex{0.0, 0.0};
     Eigen::Vector2d p1{0.0, 0.0};
     Eigen::Vector2d p2{0.0, 0.0};
+    int plane{0};  // 0=Top, 1=Front, 2=Right
     double radius{600.0};
     double text_height{120.0};
     double arrow_size{60.0};

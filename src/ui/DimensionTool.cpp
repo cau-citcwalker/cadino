@@ -45,6 +45,7 @@ void DimensionTool::on_press(PlanView& view, QPointF model_pos, Qt::MouseButton 
     d.start = {start_->x(), start_->y()};
     d.end = {end_->x(), end_->y()};
     d.offset = perp_offset(*start_, *end_, model_pos);
+    d.plane = static_cast<int>(view.plane());
     view.command_stack().execute(
         std::make_unique<cadino::core::AddDimensionCommand>(std::move(d)));
 

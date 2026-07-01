@@ -25,6 +25,7 @@ void AngularDimensionTool::on_press(PlanView& view, QPointF model_pos,
     a.vertex = {vertex_->x(), vertex_->y()};
     a.p1 = {arm1_->x(), arm1_->y()};
     a.p2 = {model_pos.x(), model_pos.y()};
+    a.plane = static_cast<int>(view.plane());
     a.radius = std::min(
         std::hypot(arm1_->x() - vertex_->x(), arm1_->y() - vertex_->y()),
         std::hypot(model_pos.x() - vertex_->x(), model_pos.y() - vertex_->y())) * 0.7;
